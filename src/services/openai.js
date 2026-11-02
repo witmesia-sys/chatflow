@@ -9,7 +9,8 @@ import { checkCalendarAvailability, createCalendarEvent } from './calendar.js';
 import { logger } from '../utils/logger.js';
 
 const genAI  = new GoogleGenerativeAI(process.env.GEMINI_API_KEY ?? '');
-const MODEL  = process.env.AI_MODEL ?? 'gemini-1.5-flash';
+// gemini-2.0-flash-exp es el modelo gratuito más estable actualmente
+const MODEL  = process.env.AI_MODEL ?? 'gemini-2.0-flash-exp';
 
 // Herramientas en formato Gemini Function Calling
 const TOOLS = [{

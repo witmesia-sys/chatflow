@@ -196,31 +196,8 @@ _Notificación enviada automáticamente a tu WhatsApp_`;
           logger.warn(`Error registrando cita en DB: ${e.message}`);
         }
 
-        toolResult = {
-          success: true,
-          ticket_code: ticketCode,
-          confirmation_text: customerTicket,
-        };
-
-        const followUp = await chat.sendMessage([{
-          functionResponse: {
-            name: fnCall.name,
-            response: { name: fnCall.name, content: toolResult },
-          },
-        }]);
-
-        let followText = '';
-        try {
-          followText = followUp.response.text();
-        } catch (e) {
-          followText = `¡Listo ${client_name}! Tu turno ha quedado reservado exitosamente.`;
-        }
-
-        response = followText.includes(ticketCode)
-          ? followText
-          : `${followText}\n\n${customerTicket}`;
-
-        totalTokens += followUp.response.usageMetadata?.totalTokenCount ?? 0;
+        // 4. Respuesta directa al cliente con el ticket oficial (sin latencia de segundo llamado a Gemini)
+        response = `¡Listo, ${client_name}! Tu cita ha quedado confirmada con éxito. 🎉\n\n${customerTicket}`;
       } else if (fnCall.name === 'check_availability') {
         toolResult = await checkCalendarAvailability(business, fnCall.args.service, fnCall.args.preferred_date);
         const followUp = await chat.sendMessage([{

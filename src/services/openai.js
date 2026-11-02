@@ -1,55 +1,47 @@
 /**
- * Servicio de IA usando Groq API (compatible con OpenAI).
- * Groq no tiene restricciones geográficas — funciona desde Venezuela.
- * Modelo: llama-3.3-70b-versatile con soporte de function calling.
+ * Servicio de IA usando Google Gemini API (SDK oficial).
+ * Gemini 1.5 Flash: 1 millón de tokens gratis por día, sin restricciones geo.
+ * El servidor corre en EEUU (Render), así que no hay bloqueo desde Venezuela.
  */
-import OpenAI from 'openai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { getKnowledgeBase, saveMessage, logUsage } from './supabase.js';
 import { checkCalendarAvailability, createCalendarEvent } from './calendar.js';
 import { logger } from '../utils/logger.js';
 
-// Cliente OpenAI apuntando al endpoint de Groq
-const groq = new OpenAI({
-  apiKey:  process.env.GROQ_API_KEY,
-  baseURL: 'https://api.groq.com/openai/v1',
-});
+const genAI  = new GoogleGenerativeAI(process.env.GEMINI_API_KEY ?? '');
+const MODEL  = process.env.AI_MODEL ?? 'gemini-1.5-flash';
 
-const MODEL = process.env.AI_MODEL ?? 'llama-3.3-70b-versatile';
-
-const TOOLS = [
-  {
-    type: 'function',
-    function: {
+// Herramientas en formato Gemini Function Calling
+const TOOLS = [{
+  functionDeclarations: [
+    {
       name: 'check_availability',
       description: 'Consulta los próximos slots disponibles en Google Calendar del negocio',
       parameters: {
-        type: 'object',
+        type: 'OBJECT',
         properties: {
-          service:        { type: 'string', description: 'Nombre del servicio solicitado' },
-          preferred_date: { type: 'string', description: 'Fecha preferida en ISO 8601 (opcional)' },
+          service:        { type: 'STRING', description: 'Nombre del servicio solicitado' },
+          preferred_date: { type: 'STRING', description: 'Fecha preferida ISO 8601 (opcional)' },
         },
         required: ['service'],
       },
     },
-  },
-  {
-    type: 'function',
-    function: {
+    {
       name: 'create_appointment',
       description: 'Crea una cita en Google Calendar y la registra en la base de datos',
       parameters: {
-        type: 'object',
+        type: 'OBJECT',
         properties: {
-          contact_name:  { type: 'string', description: 'Nombre completo del cliente' },
-          contact_phone: { type: 'string', description: 'Teléfono del cliente' },
-          service:       { type: 'string', description: 'Nombre del servicio' },
-          datetime_iso:  { type: 'string', description: 'Fecha y hora exacta en ISO 8601' },
+          contact_name:  { type: 'STRING', description: 'Nombre completo del cliente' },
+          contact_phone: { type: 'STRING', description: 'Teléfono del cliente' },
+          service:       { type: 'STRING', description: 'Nombre del servicio' },
+          datetime_iso:  { type: 'STRING', description: 'Fecha y hora exacta en ISO 8601' },
         },
         required: ['contact_name', 'service', 'datetime_iso'],
       },
     },
-  },
-];
+  ],
+}];
 
 function buildSystemPrompt(business, knowledgeChunks) {
   const toneMap = {
@@ -82,7 +74,6 @@ REGLAS (NUNCA las rompas):
 }
 
 export async function handleIncomingMessage({ business, contact, conversation, userText, waMessageId }) {
-  // Guardar mensaje del usuario
   await saveMessage({
     conversationId: conversation.id,
     businessId:     business.id,
@@ -95,61 +86,55 @@ export async function handleIncomingMessage({ business, contact, conversation, u
   const systemPrompt    = buildSystemPrompt(business, knowledgeChunks);
   const history         = (conversation.context_window ?? []).slice(-10);
 
-  const messages = [
-    { role: 'system', content: systemPrompt },
-    ...history,
-    { role: 'user',   content: userText },
-  ];
+  // Convertir historial al formato Gemini (roles: user/model)
+  const geminiHistory = history.map(m => ({
+    role:  m.role === 'assistant' ? 'model' : 'user',
+    parts: [{ text: m.content }],
+  }));
 
   let response    = null;
   let totalTokens = 0;
 
   try {
-    const completion = await groq.chat.completions.create({
-      model:       MODEL,
-      messages,
-      tools:       TOOLS,
-      tool_choice: 'auto',
-      max_tokens:  300,
-      temperature: 0.4,
+    const model = genAI.getGenerativeModel({
+      model:            MODEL,
+      systemInstruction: systemPrompt,
+      tools:            TOOLS,
     });
 
-    const choice = completion.choices[0];
-    totalTokens  = completion.usage?.total_tokens ?? 0;
+    const chat   = model.startChat({ history: geminiHistory });
+    const result = await chat.sendMessage(userText);
+    const resp   = result.response;
 
-    if (choice.finish_reason === 'tool_calls') {
-      const toolCall = choice.message.tool_calls[0];
-      const args     = JSON.parse(toolCall.function.arguments);
+    totalTokens = resp.usageMetadata?.totalTokenCount ?? 0;
+
+    // Verificar si hay function calls
+    const fnCall = resp.functionCalls()?.[0];
+
+    if (fnCall) {
+      logger.info(`Tool call: ${fnCall.name}`, fnCall.args);
       let toolResult = {};
 
-      if (toolCall.function.name === 'check_availability') {
-        toolResult = await checkCalendarAvailability(business, args.service, args.preferred_date);
-      } else if (toolCall.function.name === 'create_appointment') {
-        toolResult = await createCalendarEvent(business, contact, args);
+      if (fnCall.name === 'check_availability') {
+        toolResult = await checkCalendarAvailability(business, fnCall.args.service, fnCall.args.preferred_date);
+      } else if (fnCall.name === 'create_appointment') {
+        toolResult = await createCalendarEvent(business, contact, fnCall.args);
       }
 
-      const followUp = await groq.chat.completions.create({
-        model:    MODEL,
-        messages: [
-          ...messages,
-          choice.message,
-          { role: 'tool', tool_call_id: toolCall.id, content: JSON.stringify(toolResult) },
-        ],
-        max_tokens:  200,
-        temperature: 0.4,
-      });
+      const followUp = await chat.sendMessage([{
+        functionResponse: { name: fnCall.name, response: toolResult },
+      }]);
 
-      response     = followUp.choices[0].message.content;
-      totalTokens += followUp.usage?.total_tokens ?? 0;
+      response     = followUp.response.text();
+      totalTokens += followUp.response.usageMetadata?.totalTokenCount ?? 0;
     } else {
-      response = choice.message.content;
+      response = resp.text();
     }
   } catch (err) {
-    logger.error('Error en Groq AI:', err.message);
+    logger.error('Error en Gemini AI:', err.message);
     response = 'En este momento tengo un inconveniente técnico. Por favor intenta en unos minutos o escribe "humano" para hablar con un asesor.';
   }
 
-  // Guardar respuesta del asistente
   await saveMessage({
     conversationId: conversation.id,
     businessId:     business.id,
@@ -158,6 +143,5 @@ export async function handleIncomingMessage({ business, contact, conversation, u
   });
 
   await logUsage(business.id, 'ai_call', totalTokens);
-
   return response;
 }

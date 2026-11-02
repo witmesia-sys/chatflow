@@ -1,0 +1,25 @@
+{
+  "name": "chatflow-webhook",
+  "version": "1.0.0",
+  "description": "ChatFlow AI — WhatsApp Webhook + OpenAI + Google Calendar",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "@supabase/supabase-js": "^2.45.0",
+    "axios": "^1.7.0",
+    "express": "^4.19.0",
+    "googleapis": "^144.0.0",
+    "openai": "^4.60.0"
+  },
+  "devDependencies": {
+    "dotenv": "^16.4.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

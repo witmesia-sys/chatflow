@@ -1,0 +1,13 @@
+# Secretos — NUNCA subir al repo
+.env
+
+# Dependencias
+node_modules/
+
+# Logs
+*.log
+logs/
+
+# Sistema
+.DS_Store
+Thumbs.db

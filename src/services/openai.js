@@ -4,7 +4,8 @@
  * El servidor corre en EEUU (Render), así que no hay bloqueo desde Venezuela.
  */
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { getKnowledgeBase, saveMessage, logUsage } from './supabase.js';
+import { getKnowledgeBase, saveMessage, logUsage, supabase } from './supabase.js';
+import { sendWhatsAppMessage } from './whatsapp.js';
 import { checkCalendarAvailability, createCalendarEvent } from './calendar.js';
 import { logger } from '../utils/logger.js';
 
@@ -12,7 +13,27 @@ const genAI  = new GoogleGenerativeAI(process.env.GEMINI_API_KEY ?? '');
 // gemini-2.0-flash-exp es el modelo gratuito más estable actualmente
 const MODEL  = process.env.AI_MODEL ?? 'gemini-2.0-flash-exp';
 
-// Herramientas en formato Gemini Function Calling
+// Herramienta nativa de emisión de ticket y alerta al dueño
+const BOOKING_TOOL = [{
+  functionDeclarations: [
+    {
+      name: 'register_and_confirm_booking',
+      description: 'Genera el comprobante/ticket oficial de la reserva y notifica al dueño del negocio cuando el cliente ya ha confirmado el servicio, su nombre y la hora acordada.',
+      parameters: {
+        type: 'OBJECT',
+        properties: {
+          client_name:   { type: 'STRING', description: 'Nombre completo o nombre del cliente' },
+          service_name:  { type: 'STRING', description: 'Nombre del servicio solicitado (ej. Corte clásico, Degradado, etc.)' },
+          price:         { type: 'STRING', description: 'Precio del servicio si se conoce (ej. $10)' },
+          datetime_text: { type: 'STRING', description: 'Fecha y hora pactada (ej. Mañana a las 10:00 AM)' }
+        },
+        required: ['client_name', 'service_name', 'datetime_text']
+      }
+    }
+  ]
+}];
+
+// Herramientas de Google Calendar (opcionales si GCal está configurado)
 const TOOLS = [{
   functionDeclarations: [
     {
@@ -57,7 +78,7 @@ function buildSystemPrompt(business, knowledgeChunks) {
     : 'No hay información cargada aún. Pide al usuario que contacte directamente al negocio para más detalles.';
 
   return `Eres el asistente virtual oficial de "${business.name}".
-Tu misión: responder de forma CONCISA, natural y humana (máximo 2 a 3 frases, estilo WhatsApp), guiando al cliente a resolver dudas y reservar.
+Tu misión: responder de forma CONCISA, natural y humana (máximo 2 a 3 frases, estilo WhatsApp), guiando al cliente a resolver dudas y agendar su cita.
 
 TONO: ${tone}
 
@@ -72,10 +93,9 @@ REGLAS ESTRICTAS DE CONVERSACIÓN:
 2. DOMAIN LOCK: Si preguntan por temas ajenos al negocio, responde: "Estoy aquí exclusivamente para ayudarte con información sobre nuestros servicios y citas en ${business.name}. ¿En qué te puedo colaborar?"
 3. CERO INVENTOS DE PRECIOS: Si preguntan por un precio o servicio no registrado en la base de conocimiento, responde: "Prefiero comunicarte con un asesor para darte esa cotización exacta." No inventes precios.
 4. BREVEDAD: Máximo 2 o 3 frases por mensaje. Estilo WhatsApp ágil.
-5. AGENDAMIENTO: Cuando el cliente quiera reservar o diga "para mañana", "el viernes", etc.:
-   - Valida que esté dentro de nuestro HORARIO DE ATENCIÓN.
-   - Pregunta la hora preferida y su nombre completo si no lo sabes todavía.
-   - Una vez te dé la hora y nombre, confirma la cita con calidez.`;
+5. PROTOCOLO DE AGENDAMIENTO Y EMISIÓN DE TICKET:
+   - Cuando el cliente indique que quiere reservar o mencione un día u hora (ej. "mañana a las 10am"), valida el horario de atención y pregúntale su nombre completo si aún no lo sabes.
+   - En el instante en que tengas: 1) El servicio elegido, 2) La fecha y hora pactada, y 3) El nombre del cliente, DEBES EJECUTAR INMEDIATAMENTE la herramienta "register_and_confirm_booking" con esos datos para emitir el ticket formal y alertar al dueño.`;
 }
 
 export async function handleIncomingMessage({ business, contact, conversation, userText, waMessageId }) {
@@ -101,42 +121,121 @@ export async function handleIncomingMessage({ business, contact, conversation, u
   let totalTokens = 0;
 
   const isGCalActive = process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_ID !== 'PENDIENTE';
+  const activeTools  = isGCalActive ? [...TOOLS, ...BOOKING_TOOL] : BOOKING_TOOL;
 
   try {
-    const modelOptions = {
+    const model = genAI.getGenerativeModel({
       model:             MODEL,
       systemInstruction: systemPrompt,
-    };
-    if (isGCalActive) {
-      modelOptions.tools = TOOLS;
-    }
+      tools:             activeTools,
+    });
 
-    const model  = genAI.getGenerativeModel(modelOptions);
     const chat   = model.startChat({ history: geminiHistory });
     const result = await chat.sendMessage(userText);
     const resp   = result.response;
 
     totalTokens = resp.usageMetadata?.totalTokenCount ?? 0;
 
-    // Verificar si hay function calls (solo si Google Calendar está configurado)
+    // Verificar si hay function calls
     const fnCall = resp.functionCalls()?.[0];
 
-    if (fnCall && isGCalActive) {
+    if (fnCall) {
       logger.info(`Tool call: ${fnCall.name}`, fnCall.args);
       let toolResult = {};
 
-      if (fnCall.name === 'check_availability') {
+      if (fnCall.name === 'register_and_confirm_booking') {
+        const { client_name, service_name, price, datetime_text } = fnCall.args;
+        const ticketCode = 'CF-' + Math.floor(1000 + Math.random() * 9000);
+
+        // 1. Comprobante digital para el cliente
+        const customerTicket = `🎟️ *COMPROBANTE DE RESERVA #${ticketCode}*
+━━━━━━━━━━━━━━━━━━━━━
+💈 *Negocio:* ${business.name}
+✂️ *Servicio:* ${service_name} ${price ? `(${price})` : ''}
+📅 *Fecha/Hora:* ${datetime_text}
+👤 *Cliente:* ${client_name}
+📍 *Lugar:* ${business.address ?? 'C.C. Las Estrellas, Local 4'}
+━━━━━━━━━━━━━━━━━━━━━
+⚠️ _Tolerancia de 15 minutos. Si necesitas cancelar o reprogramar, avísanos por este chat._`;
+
+        // 2. Alerta inmediata al WhatsApp del dueño
+        const ownerAlert = `🔔 *¡NUEVA CITA REGISTRADA POR EL BOT!*
+━━━━━━━━━━━━━━━━━━━━━
+💈 *Negocio:* ${business.name}
+👤 *Cliente:* ${client_name}
+📱 *WhatsApp Cliente:* +${contact.phone}
+✂️ *Servicio:* ${service_name} ${price ? `(${price})` : ''}
+⏰ *Fecha y Hora:* ${datetime_text}
+🎟️ *Ticket:* #${ticketCode}
+━━━━━━━━━━━━━━━━━━━━━
+_Notificación enviada automáticamente a tu WhatsApp_`;
+
+        if (business.owner_phone) {
+          try {
+            await sendWhatsAppMessage(business, business.owner_phone, ownerAlert);
+            logger.info(`Alerta enviada al dueño: ${business.owner_phone}`);
+          } catch (e) {
+            logger.warn(`No se pudo enviar alerta al dueño: ${e.message}`);
+          }
+        }
+
+        // 3. Registrar en Supabase
+        try {
+          await supabase.rpc('create_appointment', {
+            p_business_id:     business.id,
+            p_contact_id:      contact.id,
+            p_service_name:    service_name,
+            p_start_time:      new Date().toISOString(),
+            p_end_time:        new Date(Date.now() + 3600000).toISOString(),
+            p_idempotency_key: `booking-${ticketCode}-${Date.now()}`,
+          });
+          if (client_name) {
+            await supabase.from('contacts').update({ name: client_name }).eq('id', contact.id);
+          }
+        } catch (e) {
+          logger.warn(`Error registrando cita en DB: ${e.message}`);
+        }
+
+        toolResult = {
+          success: true,
+          ticket_code: ticketCode,
+          confirmation_text: customerTicket,
+        };
+
+        const followUp = await chat.sendMessage([{
+          functionResponse: {
+            name: fnCall.name,
+            response: { name: fnCall.name, content: toolResult },
+          },
+        }]);
+
+        let followText = '';
+        try {
+          followText = followUp.response.text();
+        } catch (e) {
+          followText = `¡Listo ${client_name}! Tu turno ha quedado reservado exitosamente.`;
+        }
+
+        response = followText.includes(ticketCode)
+          ? followText
+          : `${followText}\n\n${customerTicket}`;
+
+        totalTokens += followUp.response.usageMetadata?.totalTokenCount ?? 0;
+      } else if (fnCall.name === 'check_availability') {
         toolResult = await checkCalendarAvailability(business, fnCall.args.service, fnCall.args.preferred_date);
+        const followUp = await chat.sendMessage([{
+          functionResponse: { name: fnCall.name, response: { name: fnCall.name, content: toolResult } },
+        }]);
+        response     = followUp.response.text();
+        totalTokens += followUp.response.usageMetadata?.totalTokenCount ?? 0;
       } else if (fnCall.name === 'create_appointment') {
         toolResult = await createCalendarEvent(business, contact, fnCall.args);
+        const followUp = await chat.sendMessage([{
+          functionResponse: { name: fnCall.name, response: { name: fnCall.name, content: toolResult } },
+        }]);
+        response     = followUp.response.text();
+        totalTokens += followUp.response.usageMetadata?.totalTokenCount ?? 0;
       }
-
-      const followUp = await chat.sendMessage([{
-        functionResponse: { name: fnCall.name, response: toolResult },
-      }]);
-
-      response     = followUp.response.text();
-      totalTokens += followUp.response.usageMetadata?.totalTokenCount ?? 0;
     } else {
       response = resp.text();
     }

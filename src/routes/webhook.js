@@ -85,16 +85,7 @@ router.post('/', verifySignature, async (req, res) => {
           continue;
         }
 
-        // 5. Fallback de latencia: si la IA tarda más de 4.5s, avisa al usuario
-        const fallbackTimer = setTimeout(async () => {
-          try {
-            await sendWhatsAppMessage(business, fromPhone,
-              '¡Hola! Dame un segundo, estoy consultando la agenda para darte la mejor opción... ⏳'
-            );
-          } catch (e) { /* no crítico */ }
-        }, 4500);
-
-        // 6. Llamar al motor de IA
+        // 5. Llamar al motor de IA
         const aiResponse = await handleIncomingMessage({
           business,
           contact,
@@ -103,9 +94,7 @@ router.post('/', verifySignature, async (req, res) => {
           waMessageId,
         });
 
-        clearTimeout(fallbackTimer);
-
-        // 7. Enviar respuesta al cliente
+        // 6. Enviar respuesta al cliente
         if (aiResponse) {
           await sendWhatsAppMessage(business, fromPhone, aiResponse);
         }

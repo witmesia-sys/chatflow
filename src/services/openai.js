@@ -57,21 +57,25 @@ function buildSystemPrompt(business, knowledgeChunks) {
     : 'No hay información cargada aún. Pide al usuario que contacte directamente al negocio para más detalles.';
 
   return `Eres el asistente virtual oficial de "${business.name}".
-Tu misión: responder dudas de forma CONCISA (máximo 2 frases, estilo WhatsApp), guiar activamente al usuario a agendar una cita o reservar un servicio.
+Tu misión: responder de forma CONCISA, natural y humana (máximo 2 a 3 frases, estilo WhatsApp), guiando al cliente a resolver dudas y reservar.
 
 TONO: ${tone}
 
-BASE DE CONOCIMIENTO:
+BASE DE CONOCIMIENTO (SERVICIOS Y PRECIOS):
 ${knowledge}
 
-HORARIO DE ATENCIÓN: ${JSON.stringify(business.business_hours ?? 'No especificado')}
+HORARIO DE ATENCIÓN: ${JSON.stringify(business.business_hours ?? 'Lunes a Sábado de 9:00 am a 8:00 pm')}
 ZONA HORARIA: ${business.timezone}
 
-REGLAS (NUNCA las rompas):
-1. DOMAIN LOCK: Si preguntan por temas ajenos al negocio, responde: "Estoy aquí exclusivamente para ayudarte con información sobre nuestros servicios y agendar tu cita. ¿En qué puedo ayudarte?"
-2. CERO INVENTOS DE PRECIOS: Si preguntan por un precio no registrado, responde: "Prefiero comunicarte con un asesor humano para darte esa cotización exacta." No inventes precios.
-3. BREVEDAD: Máximo 2 frases por respuesta.
-4. AGENDAMIENTO: Cuando el cliente quiera una cita, usa check_availability para ofrecer exactamente 2 opciones. Luego usa create_appointment para confirmar.`;
+REGLAS ESTRICTAS DE CONVERSACIÓN:
+1. NO REPETIR SALUDOS: Si la conversación ya empezó o el cliente ya saludó antes, NUNCA vuelvas a decir "¡Hola!", "Buen día" ni "Buenas noches". Ve directo a responder lo que pide.
+2. DOMAIN LOCK: Si preguntan por temas ajenos al negocio, responde: "Estoy aquí exclusivamente para ayudarte con información sobre nuestros servicios y citas en ${business.name}. ¿En qué te puedo colaborar?"
+3. CERO INVENTOS DE PRECIOS: Si preguntan por un precio o servicio no registrado en la base de conocimiento, responde: "Prefiero comunicarte con un asesor para darte esa cotización exacta." No inventes precios.
+4. BREVEDAD: Máximo 2 o 3 frases por mensaje. Estilo WhatsApp ágil.
+5. AGENDAMIENTO: Cuando el cliente quiera reservar o diga "para mañana", "el viernes", etc.:
+   - Valida que esté dentro de nuestro HORARIO DE ATENCIÓN.
+   - Pregunta la hora preferida y su nombre completo si no lo sabes todavía.
+   - Una vez te dé la hora y nombre, confirma la cita con calidez.`;
 }
 
 export async function handleIncomingMessage({ business, contact, conversation, userText, waMessageId }) {
@@ -96,23 +100,28 @@ export async function handleIncomingMessage({ business, contact, conversation, u
   let response    = null;
   let totalTokens = 0;
 
-  try {
-    const model = genAI.getGenerativeModel({
-      model:            MODEL,
-      systemInstruction: systemPrompt,
-      tools:            TOOLS,
-    });
+  const isGCalActive = process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_ID !== 'PENDIENTE';
 
+  try {
+    const modelOptions = {
+      model:             MODEL,
+      systemInstruction: systemPrompt,
+    };
+    if (isGCalActive) {
+      modelOptions.tools = TOOLS;
+    }
+
+    const model  = genAI.getGenerativeModel(modelOptions);
     const chat   = model.startChat({ history: geminiHistory });
     const result = await chat.sendMessage(userText);
     const resp   = result.response;
 
     totalTokens = resp.usageMetadata?.totalTokenCount ?? 0;
 
-    // Verificar si hay function calls
+    // Verificar si hay function calls (solo si Google Calendar está configurado)
     const fnCall = resp.functionCalls()?.[0];
 
-    if (fnCall) {
+    if (fnCall && isGCalActive) {
       logger.info(`Tool call: ${fnCall.name}`, fnCall.args);
       let toolResult = {};
 

@@ -53,6 +53,20 @@ router.post('/', verifySignature, async (req, res) => {
           continue;
         }
 
+        // 🔒 KILL SWITCH: Verificar estado de suscripción
+        if (business.subscription_status === 'suspended') {
+          logger.warn(`Negocio ${business.name} SUSPENDIDO — bot bloqueado`);
+          await sendWhatsAppMessage(business, fromPhone,
+            '⚠️ El servicio de este número no está disponible en este momento. Por favor contacta directamente al negocio.'
+          );
+          continue;
+        }
+
+        // ⚠️ OVERDUE: Bot funciona pero registra alerta
+        if (business.subscription_status === 'overdue') {
+          logger.warn(`Negocio ${business.name} con pago PENDIENTE — bot activo pero alertado`);
+        }
+
         // 2. Upsert contacto
         const contact = await upsertContact(business.id, fromPhone);
 

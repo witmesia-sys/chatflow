@@ -10,8 +10,30 @@ import { checkCalendarAvailability, createCalendarEvent } from './calendar.js';
 import { logger } from '../utils/logger.js';
 
 const genAI  = new GoogleGenerativeAI(process.env.GEMINI_API_KEY ?? '');
-// gemini-2.0-flash-exp es el modelo gratuito más estable actualmente
-const MODEL  = process.env.AI_MODEL ?? 'gemini-2.0-flash-exp';
+const MODEL  = process.env.AI_MODEL ?? 'gemini-3.5-flash';
+const FALLBACK_MODEL = 'gemini-3.5-flash-lite';
+
+/**
+ * Sanitiza el historial para cumplir las reglas estrictas de Gemini API:
+ * 1. Debe alternar estrictamente user -> model -> user -> model.
+ * 2. El primer mensaje debe ser 'user'.
+ * 3. El último mensaje debe ser 'model' (antes de enviar el nuevo userText).
+ * 4. Ignora respuestas de error anteriores para no contaminar el contexto.
+ */
+function sanitizeGeminiHistory(rawHistory) {
+  const clean = [];
+  let lastRole = null;
+  for (const m of (rawHistory || [])) {
+    if (!m.content || m.content.includes('inconveniente técnico')) continue;
+    const role = m.role === 'assistant' ? 'model' : 'user';
+    if (role === lastRole) continue;
+    clean.push({ role, parts: [{ text: m.content }] });
+    lastRole = role;
+  }
+  while (clean.length > 0 && clean[0].role !== 'user') clean.shift();
+  while (clean.length > 0 && clean[clean.length - 1].role === 'user') clean.pop();
+  return clean;
+}
 
 // Herramienta nativa de emisión de ticket y alerta al dueño
 const BOOKING_TOOL = [{
@@ -211,13 +233,7 @@ export async function handleIncomingMessage({ business, contact, conversation, u
 
   const knowledgeChunks = await getKnowledgeBase(business.id);
   const systemPrompt    = buildSystemPrompt(business, knowledgeChunks);
-  const history         = (conversation.context_window ?? []).slice(-10);
-
-  // Convertir historial al formato Gemini (roles: user/model)
-  const geminiHistory = history.map(m => ({
-    role:  m.role === 'assistant' ? 'model' : 'user',
-    parts: [{ text: m.content }],
-  }));
+  const geminiHistory   = sanitizeGeminiHistory((conversation.context_window ?? []).slice(-10));
 
   let response    = null;
   let totalTokens = 0;
@@ -226,15 +242,27 @@ export async function handleIncomingMessage({ business, contact, conversation, u
   const activeTools  = isGCalActive ? [...TOOLS, ...BOOKING_TOOL] : BOOKING_TOOL;
 
   try {
-    const model = genAI.getGenerativeModel({
+    let modelInstance = genAI.getGenerativeModel({
       model:             MODEL,
       systemInstruction: systemPrompt,
       tools:             activeTools,
     });
 
-    const chat   = model.startChat({ history: geminiHistory });
-    const result = await chat.sendMessage(userText);
-    const resp   = result.response;
+    let chat = modelInstance.startChat({ history: geminiHistory });
+    let result;
+    try {
+      result = await chat.sendMessage(userText);
+    } catch (modelErr) {
+      logger.warn(`Modelo ${MODEL} falló (${modelErr.message}). Reintentando con ${FALLBACK_MODEL}...`);
+      modelInstance = genAI.getGenerativeModel({
+        model:             FALLBACK_MODEL,
+        systemInstruction: systemPrompt,
+        tools:             activeTools,
+      });
+      chat = modelInstance.startChat({ history: geminiHistory });
+      result = await chat.sendMessage(userText);
+    }
+    const resp = result.response;
 
     totalTokens = resp.usageMetadata?.totalTokenCount ?? 0;
 

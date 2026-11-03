@@ -65,6 +65,93 @@ const TOOLS = [{
   ],
 }];
 
+/**
+ * Motor de Inferencia de Identidad y Personalidad:
+ * Si el usuario configuró nombre/género, se respeta al 100%.
+ * Si lo dejó vacío o en 'auto', se autogenera la mejor personalidad según el nicho.
+ */
+export function inferBotPersona(niche = '', customName = '', customGender = '') {
+  const n = (niche || '').toLowerCase();
+  const cName = (customName || '').trim();
+  const cGender = (customGender || '').trim().toLowerCase();
+
+  // Caso 1: Nombre y género especificados por el dueño
+  if (cName && cGender && cGender !== 'auto') {
+    return {
+      name: cName,
+      gender: cGender,
+      personality: cGender === 'female'
+        ? 'Cálida, atenta, empática, profesional y muy detallista.'
+        : 'Dinámico, atento, profesional, cercano y con excelente vibra.'
+    };
+  }
+
+  // Caso 2: Solo dio nombre
+  if (cName && (!cGender || cGender === 'auto')) {
+    return {
+      name: cName,
+      gender: 'neutral',
+      personality: 'Atento, profesional, dinámico y muy servicial.'
+    };
+  }
+
+  // Caso 3: Autogeneración inteligente según el nicho del negocio
+  if (n.includes('barber') || n.includes('afeit') || n.includes('corte hombre')) {
+    return {
+      name: 'Mateo',
+      gender: (cGender && cGender !== 'auto') ? cGender : 'male',
+      personality: 'Cercano, dinámico, con estilo urbano, buena vibra y energía fresca de barbería moderna 💈.'
+    };
+  }
+
+  if (n.includes('spa') || n.includes('estetic') || n.includes('uña') || n.includes('ceja') || n.includes('pestaña') || n.includes('skincare')) {
+    return {
+      name: 'Camila',
+      gender: (cGender && cGender !== 'auto') ? cGender : 'female',
+      personality: 'Cálida, dulce, relajante y detallista con el bienestar y el cuidado personal 🌸.'
+    };
+  }
+
+  if (n.includes('peluquer') || n.includes('salon') || n.includes('belleza') || n.includes('estilism')) {
+    return {
+      name: 'Sofía',
+      gender: (cGender && cGender !== 'auto') ? cGender : 'female',
+      personality: 'Amable, profesional, creativa y apasionada por el estilo, la moda y la imagen 💇‍♀️.'
+    };
+  }
+
+  if (n.includes('dent') || n.includes('clinic') || n.includes('medic') || n.includes('salud') || n.includes('odontolog')) {
+    return {
+      name: 'Valeria',
+      gender: (cGender && cGender !== 'auto') ? cGender : 'female',
+      personality: 'Profesional, empática, tranquilizadora y muy formal con los pacientes 🩺.'
+    };
+  }
+
+  if (n.includes('restaurant') || n.includes('cafe') || n.includes('comida') || n.includes('burger') || n.includes('pizza')) {
+    return {
+      name: 'Lucas',
+      gender: (cGender && cGender !== 'auto') ? cGender : 'male',
+      personality: 'Servicial, alegre, antojador y ágil para tomar reservas y recomendaciones 🍔.'
+    };
+  }
+
+  if (n.includes('taller') || n.includes('mecanic') || n.includes('auto') || n.includes('carro') || n.includes('lavado')) {
+    return {
+      name: 'Carlos',
+      gender: (cGender && cGender !== 'auto') ? cGender : 'male',
+      personality: 'Directo, práctico, confiable y enfocado en soluciones rápidas y eficientes 🔧.'
+    };
+  }
+
+  // Nicho genérico por defecto
+  return {
+    name: 'Alex',
+    gender: (cGender && cGender !== 'auto') ? cGender : 'neutral',
+    personality: 'Atento, eficiente, servicial, cálido y educado ✨.'
+  };
+}
+
 function buildSystemPrompt(business, knowledgeChunks) {
   const toneMap = {
     professional: 'Sé profesional, formal y preciso.',
@@ -77,7 +164,22 @@ function buildSystemPrompt(business, knowledgeChunks) {
     ? knowledgeChunks.map(k => `[${k.content_type}] ${k.title ?? ''}: ${k.content}`).join('\n')
     : 'No hay información cargada aún. Pide al usuario que contacte directamente al negocio para más detalles.';
 
-  return `Eres el asistente virtual oficial de "${business.name}".
+  const persona = inferBotPersona(business.niche, business.bot_name, business.bot_gender);
+  const genderTitle = persona.gender === 'female' ? 'la asistente virtual femenina oficial'
+                    : persona.gender === 'male'   ? 'el asistente virtual masculino oficial'
+                    : 'el asistente virtual oficial';
+
+  const grammarGuide = persona.gender === 'female'
+    ? 'Habla con concordancia femenina cuando te refieras a ti misma (ej. "estoy lista para ayudarte", "encantada de atenderte").'
+    : persona.gender === 'male'
+    ? 'Habla con concordancia masculina cuando te refieras a ti mismo (ej. "estoy listo para ayudarte", "encantado de atenderte").'
+    : 'Habla en tono neutral y cordial.';
+
+  return `Eres ${persona.name}, ${genderTitle} de "${business.name}".
+PERSONALIDAD: ${persona.personality}
+${grammarGuide}
+IDENTIDAD: Si el cliente te pregunta tu nombre o quién eres, preséntate con simpatía y orgullo: "¡Hola! Soy ${persona.name}, asistente de ${business.name} 😊".
+
 Tu misión: responder de forma CONCISA, natural y humana (máximo 2 a 3 frases, estilo WhatsApp), guiando al cliente a resolver dudas y agendar su cita.
 
 TONO: ${tone}
@@ -146,11 +248,13 @@ export async function handleIncomingMessage({ business, contact, conversation, u
       if (fnCall.name === 'register_and_confirm_booking') {
         const { client_name, service_name, price, datetime_text } = fnCall.args;
         const ticketCode = 'CF-' + Math.floor(1000 + Math.random() * 9000);
+        const persona = inferBotPersona(business.niche, business.bot_name, business.bot_gender);
 
         // 1. Comprobante digital para el cliente
         const customerTicket = `🎟️ *COMPROBANTE DE RESERVA #${ticketCode}*
 ━━━━━━━━━━━━━━━━━━━━━
 💈 *Negocio:* ${business.name}
+🤖 *Atendido por:* ${persona.name}
 ✂️ *Servicio:* ${service_name} ${price ? `(${price})` : ''}
 📅 *Fecha/Hora:* ${datetime_text}
 👤 *Cliente:* ${client_name}
@@ -159,7 +263,7 @@ export async function handleIncomingMessage({ business, contact, conversation, u
 ⚠️ _Tolerancia de 15 minutos. Si necesitas cancelar o reprogramar, avísanos por este chat._`;
 
         // 2. Alerta inmediata al WhatsApp del dueño
-        const ownerAlert = `🔔 *¡NUEVA CITA REGISTRADA POR EL BOT!*
+        const ownerAlert = `🔔 *¡NUEVA CITA REGISTRADA POR ${persona.name.toUpperCase()}!*
 ━━━━━━━━━━━━━━━━━━━━━
 💈 *Negocio:* ${business.name}
 👤 *Cliente:* ${client_name}
@@ -197,7 +301,7 @@ _Notificación enviada automáticamente a tu WhatsApp_`;
         }
 
         // 4. Respuesta directa al cliente con el ticket oficial (sin latencia de segundo llamado a Gemini)
-        response = `¡Listo, ${client_name}! Tu cita ha quedado confirmada con éxito. 🎉\n\n${customerTicket}`;
+        response = `¡Listo, ${client_name}! ${persona.name} ha confirmado tu cita con éxito. 🎉\n\n${customerTicket}`;
       } else if (fnCall.name === 'check_availability') {
         toolResult = await checkCalendarAvailability(business, fnCall.args.service, fnCall.args.preferred_date);
         const followUp = await chat.sendMessage([{

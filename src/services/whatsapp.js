@@ -4,8 +4,9 @@ import { logger } from '../utils/logger.js';
 const META_API_BASE = 'https://graph.facebook.com/v21.0';
 
 export async function sendWhatsAppMessage(business, toPhone, text) {
-  // Usa el token del negocio si está disponible, si no cae al token del .env
-  const token   = business._wa_token ?? process.env.WHATSAPP_ACCESS_TOKEN;
+  // Usa el token del negocio (columna o notes) si está disponible, si no cae al token del .env
+  const noteToken = business.notes?.match(/wa_token:\s*([^\s;]+)/i)?.[1]?.trim();
+  const token   = business._wa_token ?? business.wa_token ?? noteToken ?? process.env.WHATSAPP_ACCESS_TOKEN;
   const phoneId = business.whatsapp_phone_id ?? process.env.WHATSAPP_PHONE_NUMBER_ID;
 
   try {

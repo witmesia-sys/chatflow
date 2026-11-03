@@ -10,8 +10,22 @@ import { checkCalendarAvailability, createCalendarEvent } from './calendar.js';
 import { logger } from '../utils/logger.js';
 
 const genAI  = new GoogleGenerativeAI(process.env.GEMINI_API_KEY ?? '');
-const MODEL  = process.env.AI_MODEL ?? 'gemini-3.5-flash';
-const FALLBACK_MODEL = 'gemini-3.5-flash-lite';
+
+// gemini-3.5-flash-lite responde en ~600ms (sub-segundo).
+// Ignoramos modelos pesados o experimentales como 3.8 que causan latencias de 3 minutos.
+const envModel = process.env.AI_MODEL || '';
+const PRIMARY_MODEL = (envModel.includes('3.8') || envModel.includes('exp') || !envModel)
+  ? 'gemini-3.5-flash-lite'
+  : envModel;
+const FALLBACK_MODEL = 'gemini-3.5-flash';
+
+// Timeout de seguridad de 4 segundos para garantizar respuestas instantáneas
+function sendMessageWithTimeout(chat, message, timeoutMs = 4000) {
+  const timeout = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error('TIMEOUT_EXCEEDED')), timeoutMs)
+  );
+  return Promise.race([chat.sendMessage(message), timeout]);
+}
 
 /**
  * Sanitiza el historial para cumplir las reglas estrictas de Gemini API:
@@ -243,7 +257,7 @@ export async function handleIncomingMessage({ business, contact, conversation, u
 
   try {
     let modelInstance = genAI.getGenerativeModel({
-      model:             MODEL,
+      model:             PRIMARY_MODEL,
       systemInstruction: systemPrompt,
       tools:             activeTools,
     });
@@ -251,16 +265,16 @@ export async function handleIncomingMessage({ business, contact, conversation, u
     let chat = modelInstance.startChat({ history: geminiHistory });
     let result;
     try {
-      result = await chat.sendMessage(userText);
+      result = await sendMessageWithTimeout(chat, userText, 4000);
     } catch (modelErr) {
-      logger.warn(`Modelo ${MODEL} falló (${modelErr.message}). Reintentando con ${FALLBACK_MODEL}...`);
+      logger.warn(`Modelo primario ${PRIMARY_MODEL} demoró o falló (${modelErr.message}). Conmutando al instante a ${FALLBACK_MODEL}...`);
       modelInstance = genAI.getGenerativeModel({
         model:             FALLBACK_MODEL,
         systemInstruction: systemPrompt,
         tools:             activeTools,
       });
       chat = modelInstance.startChat({ history: geminiHistory });
-      result = await chat.sendMessage(userText);
+      result = await sendMessageWithTimeout(chat, userText, 5000);
     }
     const resp = result.response;
 

@@ -4,6 +4,7 @@ import { handleIncomingMessage } from '../services/openai.js';
 import { sendWhatsAppMessage } from '../services/whatsapp.js';
 import { getBusinessByPhone, upsertContact, getOrCreateConversation } from '../services/supabase.js';
 import { checkHandoffTriggers, triggerHumanHandoff } from '../services/handoff.js';
+import { handleOwnerCommand } from '../services/ownerCommands.js';
 import { logger } from '../utils/logger.js';
 
 const router = Router();
@@ -79,13 +80,27 @@ router.post('/', verifySignature, async (req, res) => {
           continue;
         }
 
-        // 4. Verificar si el usuario pide hablar con un humano
+        // 4. Interceptar Comandos del Dueño por WhatsApp (#citas, #agotar, #disponible, #bloquear, #ayuda)
+        const cleanFrom  = String(fromPhone).replace(/\D/g, '');
+        const cleanOwner = String(business.owner_phone || '').replace(/\D/g, '');
+        const isOwner    = cleanOwner && (cleanFrom === cleanOwner || cleanFrom.endsWith(cleanOwner) || cleanOwner.endsWith(cleanFrom));
+
+        if (isOwner && (userText.startsWith('#') || userText.startsWith('!'))) {
+          logger.info(`Comando de dueño recibido de ${fromPhone}: ${userText}`);
+          const ownerReply = await handleOwnerCommand(business, userText.trim());
+          if (ownerReply) {
+            await sendWhatsAppMessage(business, fromPhone, ownerReply);
+            continue;
+          }
+        }
+
+        // 5. Verificar si el usuario pide hablar con un humano
         if (checkHandoffTriggers(userText)) {
           await triggerHumanHandoff(business, conversation, contact, fromPhone);
           continue;
         }
 
-        // 5. Llamar al motor de IA
+        // 6. Llamar al motor de IA
         const aiResponse = await handleIncomingMessage({
           business,
           contact,

@@ -117,6 +117,27 @@ export async function getKnowledgeBase(businessId) {
 }
 
 // ─────────────────────────────────────────────
+// APPOINTMENTS (AGENDA DE CITAS)
+// ─────────────────────────────────────────────
+
+export async function getUpcomingAppointments(businessId) {
+  try {
+    const { data } = await supabase
+      .from('appointments')
+      .select('id, service_name, slot, notes, status, contacts(full_name, phone)')
+      .eq('business_id', businessId)
+      .eq('status', 'confirmed')
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    return data ?? [];
+  } catch (err) {
+    logger.warn(`getUpcomingAppointments: ${err.message}`);
+    return [];
+  }
+}
+
+// ─────────────────────────────────────────────
 // MESSAGES
 // ─────────────────────────────────────────────
 

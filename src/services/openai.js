@@ -4,7 +4,7 @@
  * El servidor corre en EEUU (Render), así que no hay bloqueo desde Venezuela.
  */
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { getKnowledgeBase, saveMessage, logUsage, supabase } from './supabase.js';
+import { getKnowledgeBase, getUpcomingAppointments, saveMessage, logUsage, supabase } from './supabase.js';
 import { sendWhatsAppMessage } from './whatsapp.js';
 import { checkCalendarAvailability, createCalendarEvent } from './calendar.js';
 import { logger } from '../utils/logger.js';
@@ -188,7 +188,7 @@ export function inferBotPersona(niche = '', customName = '', customGender = '') 
   };
 }
 
-function buildSystemPrompt(business, knowledgeChunks) {
+function buildSystemPrompt(business, knowledgeChunks, upcomingAppointments = []) {
   const toneMap = {
     professional: 'Sé profesional, formal y preciso.',
     friendly:     'Sé amigable, cálido y usa emojis con moderación 😊.',
@@ -211,6 +211,14 @@ function buildSystemPrompt(business, knowledgeChunks) {
     ? 'Habla con concordancia masculina cuando te refieras a ti mismo (ej. "estoy listo para ayudarte", "encantado de atenderte").'
     : 'Habla en tono neutral y cordial.';
 
+  const bookedSlotsSummary = (upcomingAppointments && upcomingAppointments.length > 0)
+    ? upcomingAppointments.map(a => {
+        const client = a.contacts?.full_name || 'Cliente';
+        const notes = a.notes || '';
+        return `• ${a.service_name} (${notes || 'Horario reservado'})`;
+      }).join('\n')
+    : 'No hay citas registradas recientemente en la agenda.';
+
   return `Eres ${persona.name}, ${genderTitle} de "${business.name}".
 PERSONALIDAD: ${persona.personality}
 ${grammarGuide}
@@ -220,19 +228,24 @@ Tu misión: responder de forma CONCISA, natural y humana (máximo 2 a 3 frases, 
 
 TONO: ${tone}
 
-BASE DE CONOCIMIENTO (SERVICIOS Y PRECIOS):
+BASE DE CONOCIMIENTO (SERVICIOS, PRECIOS, STOCK Y NOVEDADES):
 ${knowledge}
+
+CITAS Y TURNOS YA RESERVADOS EN LA AGENDA (HORARIOS OCUPADOS):
+${bookedSlotsSummary}
 
 HORARIO DE ATENCIÓN: ${JSON.stringify(business.business_hours ?? 'Lunes a Sábado de 9:00 am a 8:00 pm')}
 ZONA HORARIA: ${business.timezone}
 
 REGLAS ESTRICTAS DE CONVERSACIÓN:
 1. NO REPETIR SALUDOS: Si la conversación ya empezó o el cliente ya saludó antes, NUNCA vuelvas a decir "¡Hola!", "Buen día" ni "Buenas noches". Ve directo a responder lo que pide.
-2. DOMAIN LOCK: Si preguntan por temas ajenos al negocio, responde: "Estoy aquí exclusivamente para ayudarte con información sobre nuestros servicios y citas en ${business.name}. ¿En qué te puedo colaborar?"
-3. CERO INVENTOS DE PRECIOS: Si preguntan por un precio o servicio no registrado en la base de conocimiento, responde: "Prefiero comunicarte con un asesor para darte esa cotización exacta." No inventes precios.
-4. BREVEDAD: Máximo 2 o 3 frases por mensaje. Estilo WhatsApp ágil.
-5. PROTOCOLO DE AGENDAMIENTO Y EMISIÓN DE TICKET:
-   - Cuando el cliente indique que quiere reservar o mencione un día u hora (ej. "mañana a las 10am"), valida el horario de atención y pregúntale su nombre completo si aún no lo sabes.
+2. DISPONIBILIDAD DE HORARIOS: Si el cliente pide un día u hora que coincide con los turnos reservados arriba, indícale amablemente: "Ese turno específico ya se encuentra reservado, pero con gusto te puedo agendar a las [proponer horas disponibles]" dentro del horario de atención.
+3. PRODUCTOS Y SERVICIOS AGOTADOS: Si en la base de conocimiento algún servicio o producto aparece listado como AGOTADO o NO DISPONIBLE, NO permitas reservarlo ni comprarlo; explica amablemente que está agotado por el momento y sugiere la mejor opción alterna.
+4. CERO INVENTOS DE PRECIOS: Si preguntan por un precio o servicio no registrado en la base de conocimiento, responde: "Prefiero comunicarte con un asesor para darte esa cotización exacta." No inventes precios.
+5. DOMAIN LOCK: Si preguntan por temas ajenos al negocio, responde: "Estoy aquí exclusivamente para ayudarte con información sobre nuestros servicios y citas en ${business.name}. ¿En qué te puedo colaborar?"
+6. BREVEDAD: Máximo 2 o 3 frases por mensaje. Estilo WhatsApp ágil.
+7. PROTOCOLO DE AGENDAMIENTO Y EMISIÓN DE TICKET:
+   - Cuando el cliente indique que quiere reservar o mencione un día u hora (ej. "mañana a las 10am"), valida que no choque con las citas ocupadas y pregúntale su nombre si aún no lo sabes.
    - En el instante en que tengas: 1) El servicio elegido, 2) La fecha y hora pactada, y 3) El nombre del cliente, DEBES EJECUTAR INMEDIATAMENTE la herramienta "register_and_confirm_booking" con esos datos para emitir el ticket formal y alertar al dueño.`;
 }
 
@@ -245,8 +258,11 @@ export async function handleIncomingMessage({ business, contact, conversation, u
     waMessageId,
   });
 
-  const knowledgeChunks = await getKnowledgeBase(business.id);
-  const systemPrompt    = buildSystemPrompt(business, knowledgeChunks);
+  const [knowledgeChunks, upcomingAppointments] = await Promise.all([
+    getKnowledgeBase(business.id),
+    getUpcomingAppointments(business.id)
+  ]);
+  const systemPrompt    = buildSystemPrompt(business, knowledgeChunks, upcomingAppointments);
   const geminiHistory   = sanitizeGeminiHistory((conversation.context_window ?? []).slice(-10));
 
   let response    = null;
@@ -327,16 +343,19 @@ _Notificación enviada automáticamente a tu WhatsApp_`;
 
         // 3. Registrar en Supabase
         try {
+          const appointmentNotes = `Cliente: ${client_name} | Horario: ${datetime_text} | Precio: ${price || 'N/A'}`;
           await supabase.rpc('create_appointment', {
             p_business_id:     business.id,
             p_contact_id:      contact.id,
             p_service_name:    service_name,
             p_start_time:      new Date().toISOString(),
             p_end_time:        new Date(Date.now() + 3600000).toISOString(),
+            p_gcal_event_id:   null,
             p_idempotency_key: `booking-${ticketCode}-${Date.now()}`,
+            p_notes:           appointmentNotes,
           });
           if (client_name) {
-            await supabase.from('contacts').update({ name: client_name }).eq('id', contact.id);
+            await supabase.from('contacts').update({ full_name: client_name }).eq('id', contact.id);
           }
         } catch (e) {
           logger.warn(`Error registrando cita en DB: ${e.message}`);

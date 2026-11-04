@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
 import webhookRouter from './routes/webhook.js';
+import portalRouter from './routes/portal.js';
 import { logger } from './utils/logger.js';
 
 const app  = express();
@@ -11,6 +12,7 @@ app.use('/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json());
 
 app.use('/webhook', webhookRouter);
+app.use('/', portalRouter);
 
 app.get('/health', (_, res) => res.json({
   status: 'ok',

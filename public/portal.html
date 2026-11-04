@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Portal de Gestión — ChatFlow</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <meta name="theme-color" content="#090d16" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <style>
+    body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #090d16; }
+    .font-mono { font-family: 'JetBrains Mono', monospace; }
+    .glass {
+      background: rgba(15, 23, 42, 0.75);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .custom-scroll::-webkit-scrollbar { width: 4px; height: 4px; }
+    .custom-scroll::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); }
+    .custom-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 9999px; }
+  </style>
+</head>
+<body class="text-gray-100 min-h-screen pb-20">
+
+  <!-- Header Móvil -->
+  <header class="glass border-b border-white/10 px-4 py-3.5 sticky top-0 z-40 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div id="biz-avatar" class="w-10 h-10 rounded-xl bg-emerald-600/20 border border-emerald-500/30 flex items-center justify-center text-xl shadow-lg">
+        💈
+      </div>
+      <div>
+        <h1 id="biz-name" class="font-bold text-white text-sm sm:text-base leading-tight">Cargando negocio...</h1>
+        <div class="flex items-center gap-1.5 text-[11px] text-gray-400">
+          <span class="inline-block w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
+          <span id="biz-bot-info">Asistente Virtual Activo</span>
+        </div>
+      </div>
+    </div>
+    <div>
+      <button onclick="window.loadPortalData()" class="p-2 bg-slate-800 hover:bg-slate-700 text-gray-300 rounded-lg text-xs font-semibold border border-white/10 transition-colors" title="Actualizar">
+        ↻
+      </button>
+    </div>
+  </header>
+
+  <main class="max-w-2xl mx-auto px-4 py-4 space-y-4">
+
+    <!-- KPI Mini Cards -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+      <div class="glass rounded-xl p-3 border border-white/10 flex flex-col gap-0.5">
+        <span class="text-[10px] text-gray-400 font-medium">Citas Hoy</span>
+        <span id="kpi-confirmed" class="text-xl font-bold text-emerald-400">0</span>
+        <span class="text-[9px] text-gray-500">confirmadas</span>
+      </div>
+      <div class="glass rounded-xl p-3 border border-white/10 flex flex-col gap-0.5">
+        <span class="text-[10px] text-gray-400 font-medium">Ventas Proyectadas</span>
+        <span id="kpi-revenue" class="text-xl font-bold text-white">$0</span>
+        <span class="text-[9px] text-gray-500">USD estimadas</span>
+      </div>
+      <div class="glass rounded-xl p-3 border border-white/10 flex flex-col gap-0.5">
+        <span class="text-[10px] text-gray-400 font-medium">Atendidos</span>
+        <span id="kpi-completed" class="text-xl font-bold text-blue-400">0</span>
+        <span class="text-[9px] text-gray-500">completados</span>
+      </div>
+      <div class="glass rounded-xl p-3 border border-white/10 flex flex-col gap-0.5">
+        <span class="text-[10px] text-gray-400 font-medium">Agotados</span>
+        <span id="kpi-out" class="text-xl font-bold text-amber-400">0</span>
+        <span class="text-[9px] text-gray-500">fuera de stock</span>
+      </div>
+    </div>
+
+    <!-- Navegación de Pestañas Móviles -->
+    <div class="grid grid-cols-3 gap-1 bg-slate-900/80 p-1 rounded-xl border border-white/10 text-xs">
+      <button onclick="window.switchTab('agenda')" id="tab-btn-agenda" class="py-2 rounded-lg font-bold transition-all text-center bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center justify-center gap-1">
+        <span>📅</span> Agenda
+      </button>
+      <button onclick="window.switchTab('stock')" id="tab-btn-stock" class="py-2 rounded-lg font-semibold transition-all text-center text-gray-400 hover:text-white flex items-center justify-center gap-1">
+        <span>📦</span> Stock
+      </button>
+      <button onclick="window.switchTab('profile')" id="tab-btn-profile" class="py-2 rounded-lg font-semibold transition-all text-center text-gray-400 hover:text-white flex items-center justify-center gap-1">
+        <span>⚙️</span> Mi Negocio
+      </button>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════ -->
+    <!-- TAB 1: MI AGENDA DE CITAS                             -->
+    <!-- ══════════════════════════════════════════════════════ -->
+    <div id="tab-agenda" class="space-y-3">
+      <div class="flex items-center justify-between">
+        <h2 class="text-xs font-bold uppercase tracking-wider text-gray-400">Próximos Turnos</h2>
+        <span id="appts-count" class="text-xs font-mono text-emerald-400">0 citas</span>
+      </div>
+
+      <div id="appts-list" class="space-y-2.5">
+        <div class="glass rounded-xl p-6 text-center text-xs text-gray-500">Cargando agenda en vivo...</div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════ -->
+    <!-- TAB 2: MIS PRODUCTOS & STOCK                          -->
+    <!-- ══════════════════════════════════════════════════════ -->
+    <div id="tab-stock" class="space-y-3" style="display: none;">
+      <div class="glass rounded-xl p-3 border border-white/10 text-xs text-gray-300">
+        💡 <strong>Control Rápido de Stock:</strong> Si se te acaba un producto o servicio por hoy, tócalo para marcarlo como <strong>Agotado</strong>. Tu bot dejará de ofrecerlo al instante.
+      </div>
+
+      <div class="flex items-center justify-between">
+        <h2 class="text-xs font-bold uppercase tracking-wider text-gray-400">Servicios & Productos</h2>
+        <button onclick="window.promptNewOutOfStock()" class="text-xs text-emerald-400 hover:text-emerald-300 font-semibold cursor-pointer">
+          + Marcar Otro Agotado
+        </button>
+      </div>
+
+      <div id="stock-list" class="space-y-2">
+        <div class="glass rounded-xl p-6 text-center text-xs text-gray-500">Cargando catálogo...</div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════ -->
+    <!-- TAB 3: FORMULARIO DE AUTOSERVICIO (MI NEGOCIO & BOT) -->
+    <!-- ══════════════════════════════════════════════════════ -->
+    <div id="tab-profile" class="space-y-3" style="display: none;">
+      
+      <!-- Banner de Alerta / Estado del Filtro -->
+      <div id="anomaly-alert-box" class="glass rounded-xl p-3.5 border border-amber-500/30 bg-amber-500/10 text-amber-300 text-xs space-y-1" style="display: none;"></div>
+
+      <div class="glass rounded-2xl p-4 border border-white/10 space-y-3.5">
+        <div class="border-b border-white/10 pb-2">
+          <h2 class="font-bold text-white text-xs uppercase tracking-wider">Configuración del Negocio y Asistente IA</h2>
+          <p class="text-[11px] text-gray-400">Actualiza tus precios, horarios y datos. Tu bot se entrenará automáticamente con estos cambios.</p>
+        </div>
+
+        <div>
+          <label class="block text-xs text-gray-400 mb-1">Nombre Comercial del Negocio</label>
+          <input id="input-biz-name" class="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white text-xs focus:outline-none focus:border-emerald-500" />
+        </div>
+
+        <div>
+          <label class="block text-xs text-gray-400 mb-1">Dirección Exacta y Punto de Referencia</label>
+          <input id="input-biz-address" placeholder="Ej. Av. Principal, C.C. Las Estrellas, Local 4 (Frente a la plaza)" class="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white text-xs focus:outline-none focus:border-emerald-500" />
+        </div>
+
+        <div class="grid grid-cols-2 gap-2.5 p-3 bg-slate-900/60 rounded-xl border border-emerald-500/20">
+          <div>
+            <label class="block text-xs font-semibold text-emerald-400 mb-1">🤖 Nombre de tu Bot</label>
+            <input id="input-bot-name" class="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white text-xs focus:outline-none focus:border-emerald-500" placeholder="Ej. Mateo o Sofía" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-emerald-400 mb-1">Género / Voz</label>
+            <select id="input-bot-gender" class="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white text-xs focus:outline-none focus:border-emerald-500">
+              <option value="male">👨 Masculino</option>
+              <option value="female">👩 Femenino</option>
+              <option value="neutral">🤖 Neutro</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs text-gray-400 mb-1">WhatsApp de Alertas del Dueño (con código de país)</label>
+          <input id="input-owner-phone" placeholder="Ej. 584142558415" class="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white text-xs focus:outline-none focus:border-emerald-500 font-mono" />
+        </div>
+
+        <div>
+          <label class="block text-xs text-gray-400 mb-1">Menú de Servicios y Precios Oficiales</label>
+          <textarea id="input-services-text" rows="5" class="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white text-xs focus:outline-none focus:border-emerald-500 font-mono text-[11px] custom-scroll" placeholder="- Corte clásico: $10 (30 min)&#10;- Corte degradado / fade: $12&#10;- Barba y perfilado: $6"></textarea>
+          <span class="text-[10px] text-gray-500">Indica el nombre y precio en dólares. El bot responderá con estas tarifas exactas.</span>
+        </div>
+
+        <div>
+          <label class="block text-xs text-gray-400 mb-1">Políticas, Tolerancia y Métodos de Pago</label>
+          <textarea id="input-policies" rows="3" class="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white text-xs focus:outline-none focus:border-emerald-500 text-xs custom-scroll" placeholder="Tolerancia de 15 minutos para citas. Formas de pago: Pago Móvil, Zelle, Efectivo y Punto."></textarea>
+        </div>
+
+        <button onclick="window.saveBusinessProfile()" id="btn-save-profile" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-emerald-900/30 transition-all flex items-center justify-center gap-2 cursor-pointer">
+          <span>💾</span> Guardar y Actualizar Memoria del Bot
+        </button>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Toast de Notificación -->
+  <div id="toast" class="fixed bottom-4 left-4 right-4 z-50 glass border border-emerald-500/40 text-emerald-400 px-4 py-3 rounded-xl text-xs font-semibold shadow-2xl transition-all duration-300 opacity-0 pointer-events-none translate-y-2 text-center"></div>
+
+  <script>
+    // Extraer businessId de la URL (/portal/:businessId)
+    const pathParts = window.location.pathname.split('/');
+    const businessId = pathParts[pathParts.indexOf('portal') + 1] || '783e2ef2-5f4e-46b6-8d2b-e8604b1fbefe';
+
+    let currentBizData = null;
+    let currentTab = 'agenda';
+
+    function toast(msg, isError = false) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.className = isError
+        ? 'fixed bottom-4 left-4 right-4 z-50 glass border border-rose-500/40 text-rose-400 px-4 py-3 rounded-xl text-xs font-semibold shadow-2xl transition-all duration-300 opacity-100 translate-y-0 text-center'
+        : 'fixed bottom-4 left-4 right-4 z-50 glass border border-emerald-500/40 text-emerald-400 px-4 py-3 rounded-xl text-xs font-semibold shadow-2xl transition-all duration-300 opacity-100 translate-y-0 text-center';
+      setTimeout(() => {
+        t.className = t.className.replace('opacity-100 translate-y-0', 'opacity-0 pointer-events-none translate-y-2');
+      }, 3500);
+    }
+
+    window.switchTab = function(tab) {
+      currentTab = tab;
+      ['agenda', 'stock', 'profile'].forEach(t => {
+        const view = document.getElementById('tab-' + t);
+        const btn = document.getElementById('tab-btn-' + t);
+        if (view) view.style.display = (t === tab) ? 'block' : 'none';
+        if (btn) {
+          if (t === tab) {
+            btn.className = 'py-2 rounded-lg font-bold transition-all text-center bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center justify-center gap-1';
+          } else {
+            btn.className = 'py-2 rounded-lg font-semibold transition-all text-center text-gray-400 hover:text-white flex items-center justify-center gap-1';
+          }
+        }
+      });
+    };
+
+    window.loadPortalData = async function() {
+      try {
+        const res = await fetch(`/api/portal/${businessId}`);
+        if (!res.ok) throw new Error('No se pudo cargar la información del negocio');
+        const data = await res.json();
+        currentBizData = data;
+
+        // Header
+        const b = data.business;
+        document.getElementById('biz-name').textContent = b.name;
+        document.getElementById('biz-avatar').textContent = b.bot_avatar || '💈';
+        document.getElementById('biz-bot-info').textContent = `Asistente: ${b.bot_name || 'IA'} (${b.niche || 'Servicios'})`;
+
+        // KPIs
+        const m = data.metrics || {};
+        document.getElementById('kpi-confirmed').textContent = m.confirmed_appointments || 0;
+        document.getElementById('kpi-revenue').textContent = `$${m.estimated_revenue_usd || 0}`;
+        document.getElementById('kpi-completed').textContent = m.completed_appointments || 0;
+        const outOfStockCount = (data.knowledge || []).filter(k => k.content_type === 'out_of_stock').length;
+        document.getElementById('kpi-out').textContent = outOfStockCount;
+
+        // Render Agenda
+        renderAgenda(data.appointments || []);
+
+        // Render Stock
+        renderStock(data.knowledge || []);
+
+        // Populate Form
+        populateProfileForm(b, data.knowledge || []);
+
+      } catch (err) {
+        toast(err.message, true);
+      }
+    };
+
+    function renderAgenda(appts) {
+      const container = document.getElementById('appts-list');
+      document.getElementById('appts-count').textContent = `${appts.length} citas`;
+
+      if (!appts.length) {
+        container.innerHTML = `
+          <div class="glass rounded-xl p-8 text-center text-gray-500 text-xs">
+            No tienes citas agendadas todavía. Cada vez que tu bot confirme una reserva, aparecerá aquí al instante.
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = appts.map(a => {
+        const ticket = a.idempotency_key?.match(/CF-\d+/)?.[0] || 'CF-TICKET';
+        const client = a.contacts?.full_name || (a.notes?.match(/Cliente:\s*([^|]+)/i)?.[1]?.trim()) || 'Cliente';
+        const phone = a.contacts?.phone || '';
+        const notes = a.notes || '';
+        
+        const isCompleted = a.status === 'completed';
+        const isCancelled = a.status === 'cancelled';
+
+        let badge = 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
+        let statusLabel = '✅ Confirmada';
+        if (isCompleted) {
+          badge = 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+          statusLabel = '🕒 Atendido';
+        } else if (isCancelled) {
+          badge = 'bg-rose-500/20 text-rose-400 border-rose-500/30';
+          statusLabel = '❌ Cancelado';
+        }
+
+        return `
+          <div class="glass rounded-xl p-3.5 border border-white/10 space-y-2.5">
+            <div class="flex items-start justify-between gap-2">
+              <div>
+                <div class="font-bold text-white text-xs sm:text-sm flex items-center gap-1.5">
+                  <span>${client}</span>
+                  <span class="font-mono text-[10px] text-emerald-400">#${ticket}</span>
+                </div>
+                <div class="text-xs text-gray-300 font-semibold mt-0.5">${a.service_name}</div>
+              </div>
+              <span class="inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold border ${badge}">
+                ${statusLabel}
+              </span>
+            </div>
+
+            <div class="p-2 bg-slate-900/60 rounded-lg text-[11px] text-gray-300 font-mono">
+              📅 ${notes || 'Horario reservado'}
+            </div>
+
+            <div class="flex items-center justify-between pt-1 border-t border-white/5 gap-2">
+              ${phone ? `
+                <a href="https://wa.me/${phone}" target="_blank" class="text-[11px] text-emerald-400 hover:text-emerald-300 font-semibold flex items-center gap-1">
+                  <span>💬</span> WhatsApp
+                </a>
+              ` : '<span></span>'}
+
+              ${(!isCompleted && !isCancelled) ? `
+                <div class="flex items-center gap-1.5 ml-auto">
+                  <button onclick="window.updateAppt('${a.id}', 'completed')" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[11px] font-bold shadow cursor-pointer">
+                    ✅ Atendido
+                  </button>
+                  <button onclick="window.updateAppt('${a.id}', 'cancelled')" class="px-2 py-1 bg-slate-800 hover:bg-rose-900 text-gray-300 hover:text-rose-300 rounded-lg text-[11px] font-semibold border border-white/10 cursor-pointer">
+                    No vino
+                  </button>
+                </div>
+              ` : `
+                <button onclick="window.updateAppt('${a.id}', 'confirmed')" class="text-[10px] text-gray-400 hover:text-white underline cursor-pointer ml-auto">
+                  Reabrir cita
+                </button>
+              `}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    window.updateAppt = async function(id, status) {
+      try {
+        const res = await fetch(`/api/portal/${businessId}/appointments/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status })
+        });
+        if (!res.ok) throw new Error('Error al actualizar cita');
+        toast(status === 'completed' ? '🎉 Cita marcada como atendida.' : 'Estado de cita actualizado.');
+        await window.loadPortalData();
+      } catch (e) {
+        toast(e.message, true);
+      }
+    };
+
+    function renderStock(knowledge) {
+      const container = document.getElementById('stock-list');
+      const outOfStockItems = knowledge.filter(k => k.content_type === 'out_of_stock');
+
+      // Extraer lista común de servicios del negocio
+      const servicesKb = knowledge.find(k => k.content_type === 'services_and_prices');
+      let knownServices = ['Corte clásico', 'Corte degradado / fade', 'Barba y perfilado', 'Combo Corte + Barba', 'Lavado y peinado', 'Pomada mate'];
+
+      if (servicesKb && servicesKb.content) {
+        const lines = servicesKb.content.split('\n');
+        const extracted = lines
+          .map(l => l.replace(/^[-*•\d.]+\s*/, '').split(':')[0].trim())
+          .filter(l => l.length > 2 && l.length < 35 && !l.toLowerCase().includes('horario') && !l.toLowerCase().includes('direcc'));
+        if (extracted.length) knownServices = [...new Set([...extracted, ...knownServices])];
+      }
+
+      container.innerHTML = knownServices.map(name => {
+        const isOut = outOfStockItems.some(item => item.title.toLowerCase().includes(name.toLowerCase()));
+
+        return `
+          <div class="glass rounded-xl p-3 border border-white/10 flex items-center justify-between gap-3">
+            <div>
+              <div class="text-xs font-bold text-white">${name}</div>
+              <div class="text-[10px] ${isOut ? 'text-rose-400 font-semibold' : 'text-emerald-400'}">
+                ${isOut ? '🔴 AGOTADO — El bot no lo ofrecerá' : '🟢 Disponible para agendar'}
+              </div>
+            </div>
+            <button onclick="window.toggleStockItem('${name}', ${isOut})" class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer shadow ${isOut ? 'bg-emerald-600 hover:bg-emerald-500 text-white' : 'bg-slate-800 hover:bg-rose-900/60 text-gray-300 hover:text-rose-300 border border-white/10'}">
+              ${isOut ? '✅ Marcar Disponible' : '⚠️ Marcar Agotado'}
+            </button>
+          </div>
+        `;
+      }).join('');
+    }
+
+    window.toggleStockItem = async function(itemName, isCurrentlyOut) {
+      try {
+        const res = await fetch(`/api/portal/${businessId}/stock/toggle`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ item_name: itemName, is_currently_out: isCurrentlyOut })
+        });
+        if (!res.ok) throw new Error('Error al actualizar disponibilidad');
+        toast(isCurrentlyOut ? `✅ "${itemName}" disponible de nuevo.` : `⚠️ "${itemName}" marcado como agotado.`);
+        await window.loadPortalData();
+      } catch (e) {
+        toast(e.message, true);
+      }
+    };
+
+    window.promptNewOutOfStock = function() {
+      const item = prompt('Escribe el nombre del producto o servicio que se agotó:');
+      if (item && item.trim()) {
+        window.toggleStockItem(item.trim(), false);
+      }
+    };
+
+    function populateProfileForm(biz, knowledge) {
+      document.getElementById('input-biz-name').value = biz.name || '';
+      document.getElementById('input-biz-address').value = biz.address || '';
+      document.getElementById('input-bot-name').value = biz.bot_name || '';
+      document.getElementById('input-bot-gender').value = biz.bot_gender || 'male';
+      document.getElementById('input-owner-phone').value = biz.owner_phone || '';
+      document.getElementById('input-policies').value = biz.policies || '';
+
+      const servicesKb = knowledge.find(k => k.content_type === 'services_and_prices');
+      if (servicesKb) {
+        document.getElementById('input-services-text').value = servicesKb.content;
+      }
+
+      // Revisar si hay anomalías pendientes
+      const anomalyKb = knowledge.find(k => k.content_type === 'anomaly_review');
+      const alertBox = document.getElementById('anomaly-alert-box');
+      if (anomalyKb) {
+        let parsed = {};
+        try { parsed = JSON.parse(anomalyKb.content); } catch (e) {}
+        alertBox.style.display = 'block';
+        alertBox.innerHTML = `
+          <div class="font-bold flex items-center gap-1.5">
+            <span>🛡️</span> Validación de Seguridad en Curso
+          </div>
+          <div class="text-[11px] text-amber-200/90">
+            Los últimos cambios que enviaste contienen valores inusuales (${(parsed.reasons || []).join(', ')}). 
+            Por tu protección, tu bot continúa atendiendo con los precios anteriores mientras el administrador revisa tu solicitud.
+          </div>
+        `;
+      } else {
+        alertBox.style.display = 'none';
+      }
+    }
+
+    window.saveBusinessProfile = async function() {
+      const btn = document.getElementById('btn-save-profile');
+      btn.disabled = true;
+      btn.innerHTML = '<span>⏳</span> Evaluando y actualizando bot...';
+
+      const payload = {
+        name: document.getElementById('input-biz-name').value.trim(),
+        address: document.getElementById('input-biz-address').value.trim(),
+        bot_name: document.getElementById('input-bot-name').value.trim(),
+        bot_gender: document.getElementById('input-bot-gender').value,
+        owner_phone: document.getElementById('input-owner-phone').value.trim(),
+        services_text: document.getElementById('input-services-text').value.trim(),
+        policies: document.getElementById('input-policies').value.trim(),
+      };
+
+      try {
+        const res = await fetch(`/api/portal/${businessId}/profile`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Error al guardar');
+
+        if (data.anomaly) {
+          toast('⚠️ ' + data.message, true);
+        } else {
+          toast(data.message);
+        }
+
+        await window.loadPortalData();
+      } catch (err) {
+        toast(err.message, true);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<span>💾</span> Guardar y Actualizar Memoria del Bot';
+      }
+    };
+
+    // Carga inicial
+    window.loadPortalData();
+    setInterval(window.loadPortalData, 25000);
+  </script>
+</body>
+</html>

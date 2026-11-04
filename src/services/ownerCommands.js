@@ -96,9 +96,17 @@ export async function handleOwnerCommand(business, rawText) {
     return `🔒 *Horario bloqueado con éxito:*\n"${schedule}" quedó registrado.\n\nEl bot no otorgará citas en ese rango y ofrecerá otras horas disponibles.`;
   }
 
-  // 5. #ayuda — Menú de comandos
+  // 5. #portal o #web o #app — Enlace al Portal Web Privado
+  if (lower === '#portal' || lower === '!portal' || lower === '#web' || lower === '!web' || lower === '#app' || lower === '!app') {
+    const baseUrl = process.env.RENDER_EXTERNAL_URL || 'https://chatflow-1dns.onrender.com';
+    const portalUrl = `${baseUrl}/portal/${business.id}`;
+
+    return `📱 *PORTAL PRIVADO DE GESTIÓN — ${business.name.toUpperCase()}*\n━━━━━━━━━━━━━━━━━━━━━\nAquí tienes el acceso a tu Web App Móvil para gestionar tu negocio desde tu celular:\n\n🔗 *Acceso Directo:*\n${portalUrl}\n\n✨ *Desde tu portal puedes:*\n• 📅 Ver tus citas en vivo y marcar clientes atendidos.\n• 📦 Apagar productos agotados con un solo toque.\n• ⚙️ Modificar tus precios, horarios y nombre del bot.\n\n💡 _Tip: Abre el enlace en tu navegador móvil y selecciona "Agregar a pantalla de inicio" para tenerlo como una app en tu teléfono._`;
+  }
+
+  // 6. #ayuda — Menú de comandos
   if (lower === '#ayuda' || lower === '!ayuda' || lower === '#menu' || lower === '!menu') {
-    return `📱 *MENÚ DE CONTROL DIRECTO — DUEÑO*\n━━━━━━━━━━━━━━━━━━━━━\nPuedes controlar a tu bot desde tu propio WhatsApp con estos comandos:\n\n• *#citas* ➔ Ver la lista de citas agendadas\n• *#agotar <producto>* ➔ Marcar algo sin stock\n• *#disponible <producto>* ➔ Reactivar disponibilidad\n• *#bloquear <horario>* ➔ Bloquear horas de la agenda\n• *#ayuda* ➔ Ver este menú\n━━━━━━━━━━━━━━━━━━━━━\n_Solo tú (desde tu número de dueño) puedes ejecutar estos comandos._`;
+    return `📱 *MENÚ DE CONTROL DIRECTO — DUEÑO*\n━━━━━━━━━━━━━━━━━━━━━\nPuedes controlar a tu bot desde tu propio WhatsApp con estos comandos:\n\n• *#portal* ➔ Abrir tu Web App de gestión móvil\n• *#citas* ➔ Ver la lista de citas agendadas\n• *#agotar <producto>* ➔ Marcar algo sin stock\n• *#disponible <producto>* ➔ Reactivar disponibilidad\n• *#bloquear <horario>* ➔ Bloquear horas de la agenda\n• *#ayuda* ➔ Ver este menú\n━━━━━━━━━━━━━━━━━━━━━\n_Solo tú (desde tu número de dueño) puedes ejecutar estos comandos._`;
   }
 
   return null;

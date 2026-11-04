@@ -28,7 +28,7 @@ router.get('/api/portal/:businessId', async (req, res) => {
       return res.status(404).json({ error: 'Negocio no encontrado' });
     }
 
-    const persona = inferBotPersona(business.niche, business.bot_name, business.bot_gender);
+    const persona = inferBotPersona(business.niche, business.bot_name, business.bot_gender, business.notes);
     const finalGender = business.bot_gender || persona.gender;
     const avatar = finalGender === 'female' ? '👩' : (finalGender === 'male' ? '👨' : '🤖');
 

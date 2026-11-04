@@ -106,10 +106,21 @@ const TOOLS = [{
  * Si el usuario configuró nombre/género, se respeta al 100%.
  * Si lo dejó vacío o en 'auto', se autogenera la mejor personalidad según el nicho.
  */
-export function inferBotPersona(niche = '', customName = '', customGender = '') {
+export function inferBotPersona(niche = '', customName = '', customGender = '', notes = '') {
   const n = (niche || '').toLowerCase();
-  const cName = (customName || '').trim();
-  const cGender = (customGender || '').trim().toLowerCase();
+  let cName = (customName || '').trim();
+  let cGender = (customGender || '').trim().toLowerCase();
+
+  // Si no se proporcionó nombre/género directo, intentar extraerlo del tag [bot:Nombre|genero] en notes
+  if (!cName && notes) {
+    const match = notes.match(/\[bot:([^|\]]+)(?:\|([^\]]+))?\]/i);
+    if (match) {
+      cName = match[1]?.trim() || '';
+      if (!cGender || cGender === 'auto') {
+        cGender = (match[2]?.trim() || 'neutral').toLowerCase();
+      }
+    }
+  }
 
   // Caso 1: Nombre y género especificados por el dueño
   if (cName && cGender && cGender !== 'auto') {
@@ -200,7 +211,7 @@ function buildSystemPrompt(business, knowledgeChunks, upcomingAppointments = [])
     ? knowledgeChunks.map(k => `[${k.content_type}] ${k.title ?? ''}: ${k.content}`).join('\n')
     : 'No hay información cargada aún. Pide al usuario que contacte directamente al negocio para más detalles.';
 
-  const persona = inferBotPersona(business.niche, business.bot_name, business.bot_gender);
+  const persona = inferBotPersona(business.niche, business.bot_name, business.bot_gender, business.notes);
   const genderTitle = persona.gender === 'female' ? 'la asistente virtual femenina oficial'
                     : persona.gender === 'male'   ? 'el asistente virtual masculino oficial'
                     : 'el asistente virtual oficial';
@@ -306,7 +317,7 @@ export async function handleIncomingMessage({ business, contact, conversation, u
       if (fnCall.name === 'register_and_confirm_booking') {
         const { client_name, service_name, price, datetime_text } = fnCall.args;
         const ticketCode = 'CF-' + Math.floor(1000 + Math.random() * 9000);
-        const persona = inferBotPersona(business.niche, business.bot_name, business.bot_gender);
+        const persona = inferBotPersona(business.niche, business.bot_name, business.bot_gender, business.notes);
 
         // 1. Comprobante digital para el cliente
         const customerTicket = `🎟️ *COMPROBANTE DE RESERVA #${ticketCode}*

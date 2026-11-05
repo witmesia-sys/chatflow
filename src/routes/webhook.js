@@ -109,7 +109,7 @@ router.post('/', verifySignature, async (req, res) => {
             logger.info(`Reactivando bot automáticamente para conversación ${conversation.id} (${Math.round(timeSinceUpdate / 60000)} min transcurridos)`);
             await supabase
               .from('conversations')
-              .update({ status: 'bot_active', alert_level: null, handoff_reason: null })
+              .update({ status: 'bot_active', alert_level: null, handoff_reason: null, updated_at: new Date().toISOString() })
               .eq('id', conversation.id);
             conversation.status = 'bot_active';
           } else {

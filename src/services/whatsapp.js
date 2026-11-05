@@ -6,8 +6,8 @@ const META_API_BASE = 'https://graph.facebook.com/v21.0';
 export async function sendWhatsAppMessage(business, toPhone, text) {
   // Usa el token del negocio (columna o notes) si está disponible, si no cae al token del .env
   const noteToken = business.notes?.match(/wa_token:\s*([^\s;]+)/i)?.[1]?.trim();
-  const token   = business._wa_token ?? business.wa_token ?? noteToken ?? process.env.WHATSAPP_ACCESS_TOKEN;
-  const phoneId = business.whatsapp_phone_id ?? process.env.WHATSAPP_PHONE_NUMBER_ID;
+  const token   = business._wa_token || business.wa_token || noteToken || process.env.WHATSAPP_ACCESS_TOKEN;
+  const phoneId = (business.whatsapp_phone_id && String(business.whatsapp_phone_id).trim()) || process.env.WHATSAPP_PHONE_NUMBER_ID;
   const cleanTo = String(toPhone).replace(/\D/g, '');
 
   try {
@@ -45,8 +45,8 @@ export async function sendWhatsAppMessage(business, toPhone, text) {
  */
 export async function sendWhatsAppButtons(business, toPhone, bodyText, buttons = [], headerText = '', footerText = '') {
   const noteToken = business.notes?.match(/wa_token:\s*([^\s;]+)/i)?.[1]?.trim();
-  const token   = business._wa_token ?? business.wa_token ?? noteToken ?? process.env.WHATSAPP_ACCESS_TOKEN;
-  const phoneId = business.whatsapp_phone_id ?? process.env.WHATSAPP_PHONE_NUMBER_ID;
+  const token   = business._wa_token || business.wa_token || noteToken || process.env.WHATSAPP_ACCESS_TOKEN;
+  const phoneId = (business.whatsapp_phone_id && String(business.whatsapp_phone_id).trim()) || process.env.WHATSAPP_PHONE_NUMBER_ID;
   const cleanTo = String(toPhone).replace(/\D/g, '');
 
   if (!buttons || buttons.length === 0) {
@@ -102,8 +102,8 @@ export async function sendWhatsAppButtons(business, toPhone, bodyText, buttons =
  */
 export async function sendWhatsAppList(business, toPhone, bodyText, buttonTitle = 'Ver Opciones', sections = [], headerText = '', footerText = '') {
   const noteToken = business.notes?.match(/wa_token:\s*([^\s;]+)/i)?.[1]?.trim();
-  const token   = business._wa_token ?? business.wa_token ?? noteToken ?? process.env.WHATSAPP_ACCESS_TOKEN;
-  const phoneId = business.whatsapp_phone_id ?? process.env.WHATSAPP_PHONE_NUMBER_ID;
+  const token   = business._wa_token || business.wa_token || noteToken || process.env.WHATSAPP_ACCESS_TOKEN;
+  const phoneId = (business.whatsapp_phone_id && String(business.whatsapp_phone_id).trim()) || process.env.WHATSAPP_PHONE_NUMBER_ID;
   const cleanTo = String(toPhone).replace(/\D/g, '');
 
   const interactive = {

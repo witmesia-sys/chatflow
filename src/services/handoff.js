@@ -2,15 +2,21 @@ import { supabase } from './supabase.js';
 import { sendWhatsAppMessage } from './whatsapp.js';
 import { logger } from '../utils/logger.js';
 
-const HANDOFF_TRIGGERS = [
-  'humano', 'persona', 'hablar con el dueño', 'hablar con alguien',
-  'reclamo', 'estafa', 'queja', 'gerente', 'responsable', 'asesor',
-  'hablar con alguien', 'operador', 'representante',
+const HANDOFF_REGEXES = [
+  /\b(humano|humana)\b/i,
+  /\bhablar con (un|una|el|la|alguien)?\s*(persona|humano|dueño|dueña|asesor|gerente|responsable|encargado)/i,
+  /\b(atenci[oó]n (al cliente|personalizada|humana))\b/i,
+  /\b(asesor human[oa]|agente human[oa]|persona real)\b/i,
+  /\b(pasar|p[aá]same|comunicar|comun[ií]came|transferir|conectar)\s*(con|a)?\s*(un|una|el|la)?\s*(asesor|humano|persona|operador|dueño|dueña)/i,
+  /\b(operador|representante|gerente)\b/i,
+  /\b(reclamo|estafa|queja formal)\b/i,
+  /^(asesor|persona|ayuda humana)$/i
 ];
 
 export function checkHandoffTriggers(text) {
-  const lower = text.toLowerCase();
-  return HANDOFF_TRIGGERS.some(trigger => lower.includes(trigger));
+  if (!text) return false;
+  const lower = text.trim();
+  return HANDOFF_REGEXES.some(regex => regex.test(lower));
 }
 
 export async function triggerHumanHandoff(business, conversation, contact, fromPhone) {
@@ -22,6 +28,7 @@ export async function triggerHumanHandoff(business, conversation, contact, fromP
         status:         'human_takeover',
         alert_level:    'red',
         handoff_reason: 'trigger_keyword',
+        updated_at:     new Date().toISOString(),
       })
       .eq('id', conversation.id);
 

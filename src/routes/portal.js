@@ -146,6 +146,7 @@ router.post('/api/portal/:businessId/stock/toggle', async (req, res) => {
         .from('knowledge_base')
         .select('id')
         .eq('business_id', businessId)
+        .ilike('title', '%AGOTADO%')
         .ilike('title', `%${item_name}%`);
 
       if (matches && matches.length > 0) {

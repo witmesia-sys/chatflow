@@ -20,7 +20,7 @@ export async function handleOwnerCommand(business, rawText) {
   if (lower === '#bot' || lower === '!bot' || lower === '#reactivar' || lower === '!reactivar' || lower === '#activar') {
     await supabase
       .from('conversations')
-      .update({ status: 'bot_active', alert_level: null, handoff_reason: null })
+      .update({ status: 'bot_active', alert_level: null, handoff_reason: null, updated_at: new Date().toISOString() })
       .eq('business_id', business.id);
 
     return `🤖 *ChatFlow AI*\n\n¡Asistente virtual reactivado con éxito!\nEl bot vuelve a responder de inmediato a todos los mensajes de tus clientes.`;
@@ -79,16 +79,17 @@ export async function handleOwnerCommand(business, rawText) {
       return '⚠️ Por favor indica qué producto o servicio vuelve a estar disponible.\nEjemplo: *#disponible pomada mate*';
     }
 
-    // Desactivar entradas coincidentes
+    // Eliminar entradas de AGOTADO coincidentes (no tocar otros ítems del catálogo)
     const { data: matches } = await supabase
       .from('knowledge_base')
       .select('id, title')
       .eq('business_id', business.id)
+      .ilike('title', '%AGOTADO%')
       .ilike('title', `%${item}%`);
 
     if (matches && matches.length > 0) {
       const ids = matches.map(m => m.id);
-      await supabase.from('knowledge_base').update({ is_active: false }).in('id', ids);
+      await supabase.from('knowledge_base').delete().in('id', ids);
     }
 
     return `✅ *¡Listo!* "*${item}*" vuelve a estar marcado como *DISPONIBLE*.\n\nEl asistente virtual ya puede recomendarlo y agendarlo normalmente para tus clientes.`;

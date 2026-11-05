@@ -19,8 +19,8 @@ const PRIMARY_MODEL = (envModel.includes('3.8') || envModel.includes('exp') || !
   : envModel;
 const FALLBACK_MODEL = 'gemini-3.5-flash';
 
-// Timeout de seguridad de 4 segundos para garantizar respuestas instantáneas
-function sendMessageWithTimeout(chat, message, timeoutMs = 4000) {
+// Timeout de seguridad de 8 segundos para garantizar respuestas instantáneas sin cortes por latencia de red
+function sendMessageWithTimeout(chat, message, timeoutMs = 8000) {
   const timeout = new Promise((_, reject) =>
     setTimeout(() => reject(new Error('TIMEOUT_EXCEEDED')), timeoutMs)
   );
@@ -30,9 +30,10 @@ function sendMessageWithTimeout(chat, message, timeoutMs = 4000) {
 /**
  * Sanitiza el historial para cumplir las reglas estrictas de Gemini API:
  * 1. Debe alternar estrictamente user -> model -> user -> model.
- * 2. El primer mensaje debe ser 'user'.
- * 3. El último mensaje debe ser 'model' (antes de enviar el nuevo userText).
- * 4. Ignora respuestas de error anteriores para no contaminar el contexto.
+ * 2. Si hay mensajes consecutivos del mismo rol, los concatena.
+ * 3. El primer mensaje debe ser 'user'.
+ * 4. El último mensaje debe ser 'model' (antes de enviar el nuevo userText).
+ * 5. Ignora respuestas de error anteriores para no contaminar el contexto.
  */
 function sanitizeGeminiHistory(rawHistory) {
   const clean = [];
@@ -40,7 +41,11 @@ function sanitizeGeminiHistory(rawHistory) {
   for (const m of (rawHistory || [])) {
     if (!m.content || m.content.includes('inconveniente técnico')) continue;
     const role = m.role === 'assistant' ? 'model' : 'user';
-    if (role === lastRole) continue;
+    if (role === lastRole && clean.length > 0) {
+      // Concatenar mensajes consecutivos del mismo rol
+      clean[clean.length - 1].parts[0].text += '\n' + m.content;
+      continue;
+    }
     clean.push({ role, parts: [{ text: m.content }] });
     lastRole = role;
   }
@@ -292,7 +297,7 @@ export async function handleIncomingMessage({ business, contact, conversation, u
     let chat = modelInstance.startChat({ history: geminiHistory });
     let result;
     try {
-      result = await sendMessageWithTimeout(chat, userText, 4000);
+      result = await sendMessageWithTimeout(chat, userText, 8000);
     } catch (modelErr) {
       logger.warn(`Modelo primario ${PRIMARY_MODEL} demoró o falló (${modelErr.message}). Conmutando al instante a ${FALLBACK_MODEL}...`);
       modelInstance = genAI.getGenerativeModel({
@@ -301,7 +306,7 @@ export async function handleIncomingMessage({ business, contact, conversation, u
         tools:             activeTools,
       });
       chat = modelInstance.startChat({ history: geminiHistory });
-      result = await sendMessageWithTimeout(chat, userText, 5000);
+      result = await sendMessageWithTimeout(chat, userText, 10000);
     }
     const resp = result.response;
 

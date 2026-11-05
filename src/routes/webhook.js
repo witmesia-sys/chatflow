@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { verifySignature } from '../middleware/verify-signature.js';
 import { handleIncomingMessage } from '../services/openai.js';
 import { sendWhatsAppMessage, sendWhatsAppButtons } from '../services/whatsapp.js';
-import { getBusinessByPhone, upsertContact, getOrCreateConversation } from '../services/supabase.js';
+import { getBusinessByPhone, upsertContact, getOrCreateConversation, supabase } from '../services/supabase.js';
 import { checkHandoffTriggers, triggerHumanHandoff } from '../services/handoff.js';
 import { handleOwnerCommand } from '../services/ownerCommands.js';
 import { logger } from '../utils/logger.js';

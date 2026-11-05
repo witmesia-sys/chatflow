@@ -86,7 +86,7 @@ export async function getOrCreateConversation(businessId, contactId, waMessageId
     .neq('status', 'closed')
     .order('created_at', { ascending: false })
     .limit(1)
-    .single();
+    .maybeSingle();
 
   if (existing) return existing;
 

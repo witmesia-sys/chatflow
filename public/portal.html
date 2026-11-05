@@ -21,6 +21,45 @@
     .custom-scroll::-webkit-scrollbar { width: 4px; height: 4px; }
     .custom-scroll::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); }
     .custom-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 9999px; }
+
+    @media print {
+      body {
+        background: #ffffff !important;
+        color: #0f172a !important;
+        padding-bottom: 0 !important;
+      }
+      header, .grid-cols-4, .grid-cols-3, #kpis-bar, #tab-agenda, #tab-stock, #tab-profile, #toast, .no-print {
+        display: none !important;
+      }
+      #tab-stand {
+        display: block !important;
+        padding: 0 !important;
+        margin: 0 !important;
+      }
+      #portal-printable-stand {
+        box-shadow: none !important;
+        border: 2px solid #0f172a !important;
+        width: 100% !important;
+        max-width: 480px !important;
+        margin: 15px auto !important;
+        background: #ffffff !important;
+        color: #0f172a !important;
+        page-break-inside: avoid !important;
+      }
+      #portal-printable-stand * {
+        color: #0f172a !important;
+      }
+      #portal-printable-stand .print-border {
+        border-color: #94a3b8 !important;
+      }
+      #portal-printable-stand .print-accent {
+        color: #059669 !important;
+      }
+      #portal-printable-stand .print-badge {
+        background: #f1f5f9 !important;
+        border: 1px solid #cbd5e1 !important;
+      }
+    }
   </style>
 </head>
 <body class="text-gray-100 min-h-screen pb-20">
@@ -49,7 +88,7 @@
   <main class="max-w-2xl mx-auto px-4 py-4 space-y-4">
 
     <!-- KPI Mini Cards -->
-    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+    <div id="kpis-bar" class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
       <div class="glass rounded-xl p-3 border border-white/10 flex flex-col gap-0.5">
         <span class="text-[10px] text-gray-400 font-medium">Citas Hoy</span>
         <span id="kpi-confirmed" class="text-xl font-bold text-emerald-400">0</span>
@@ -73,15 +112,18 @@
     </div>
 
     <!-- Navegación de Pestañas Móviles -->
-    <div class="grid grid-cols-3 gap-1 bg-slate-900/80 p-1 rounded-xl border border-white/10 text-xs">
+    <div class="grid grid-cols-4 gap-1 bg-slate-900/80 p-1 rounded-xl border border-white/10 text-xs">
       <button onclick="window.switchTab('agenda')" id="tab-btn-agenda" class="py-2 rounded-lg font-bold transition-all text-center bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center justify-center gap-1">
         <span>📅</span> Agenda
       </button>
       <button onclick="window.switchTab('stock')" id="tab-btn-stock" class="py-2 rounded-lg font-semibold transition-all text-center text-gray-400 hover:text-white flex items-center justify-center gap-1">
         <span>📦</span> Stock
       </button>
+      <button onclick="window.switchTab('stand')" id="tab-btn-stand" class="py-2 rounded-lg font-semibold transition-all text-center text-gray-400 hover:text-white flex items-center justify-center gap-1">
+        <span>🖨️</span> Stand QR
+      </button>
       <button onclick="window.switchTab('profile')" id="tab-btn-profile" class="py-2 rounded-lg font-semibold transition-all text-center text-gray-400 hover:text-white flex items-center justify-center gap-1">
-        <span>⚙️</span> Mi Negocio
+        <span>⚙️</span> Negocio
       </button>
     </div>
 
@@ -91,7 +133,12 @@
     <div id="tab-agenda" class="space-y-3">
       <div class="flex items-center justify-between">
         <h2 class="text-xs font-bold uppercase tracking-wider text-gray-400">Próximos Turnos</h2>
-        <span id="appts-count" class="text-xs font-mono text-emerald-400">0 citas</span>
+        <div class="flex items-center gap-2">
+          <button onclick="window.exportMyAgenda()" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-gray-200 border border-white/10 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer shadow-sm">
+            <span>📥</span> Exportar Excel
+          </button>
+          <span id="appts-count" class="text-xs font-mono text-emerald-400">0 citas</span>
+        </div>
       </div>
 
       <div id="appts-list" class="space-y-2.5">
@@ -116,6 +163,61 @@
 
       <div id="stock-list" class="space-y-2">
         <div class="glass rounded-xl p-6 text-center text-xs text-gray-500">Cargando catálogo...</div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════ -->
+    <!-- TAB 3: STAND QR PARA MOSTRADOR                         -->
+    <!-- ══════════════════════════════════════════════════════ -->
+    <div id="tab-stand" class="space-y-3" style="display: none;">
+      <div class="flex items-center justify-between no-print">
+        <h2 class="text-xs font-bold uppercase tracking-wider text-gray-400">Stand QR de Mostrador</h2>
+        <button onclick="window.printStand()" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow">
+          <span>🖨️</span> Imprimir Stand
+        </button>
+      </div>
+
+      <div id="portal-printable-stand" class="bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 p-6 rounded-2xl border-2 border-emerald-500/30 text-center space-y-4 shadow-2xl relative overflow-hidden">
+        <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 print-badge">
+          <span id="pstand-avatar">🤖</span>
+          <span>Atención WhatsApp 24 Horas</span>
+        </div>
+
+        <div>
+          <h2 id="pstand-name" class="text-2xl font-black text-white tracking-tight uppercase print-accent">Mi Negocio</h2>
+          <p id="pstand-niche" class="text-xs text-gray-400 font-medium capitalize mt-0.5">Servicio Profesional</p>
+        </div>
+
+        <div class="p-3 bg-white rounded-2xl shadow-xl inline-block mx-auto border-4 border-emerald-500/40 print-border">
+          <img id="pstand-qr" src="" alt="Código QR WhatsApp" class="w-48 h-48 mx-auto block object-contain" />
+        </div>
+
+        <div class="space-y-1">
+          <div class="text-sm font-extrabold text-white">¡Escanea con tu celular para agendar!</div>
+          <div class="text-xs text-gray-300">
+            Hola, soy <span class="text-emerald-400 font-bold" id="pstand-bot">Mateo</span>, tu asistente virtual.
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 gap-2 text-[10px] text-gray-300 pt-2 border-t border-white/10 print-border">
+          <div class="p-2 rounded-lg bg-white/5 border border-white/5 print-badge">
+            <div class="font-bold text-emerald-400">📅 Citas</div>
+            <div class="text-gray-400">En 30 seg</div>
+          </div>
+          <div class="p-2 rounded-lg bg-white/5 border border-white/5 print-badge">
+            <div class="font-bold text-emerald-400">✂️ Precios</div>
+            <div class="text-gray-400">Tarifas al día</div>
+          </div>
+          <div class="p-2 rounded-lg bg-white/5 border border-white/5 print-badge">
+            <div class="font-bold text-emerald-400">📍 Ubicación</div>
+            <div class="text-gray-400">Y métodos</div>
+          </div>
+        </div>
+
+        <div class="pt-2 text-[10px] text-gray-400 flex items-center justify-between border-t border-white/5 print-border">
+          <span class="font-mono" id="pstand-phone">+58 000 0000000</span>
+          <span class="font-bold text-emerald-400">Powered by ChatFlow AI</span>
+        </div>
       </div>
     </div>
 
@@ -206,7 +308,7 @@
 
     window.switchTab = function(tab) {
       currentTab = tab;
-      ['agenda', 'stock', 'profile'].forEach(t => {
+      ['agenda', 'stock', 'stand', 'profile'].forEach(t => {
         const view = document.getElementById('tab-' + t);
         const btn = document.getElementById('tab-btn-' + t);
         if (view) view.style.display = (t === tab) ? 'block' : 'none';
@@ -246,6 +348,9 @@
 
         // Render Stock
         renderStock(data.knowledge || []);
+
+        // Render Stand QR
+        renderStandCard(b);
 
         // Populate Form
         populateProfileForm(b, data.knowledge || []);
@@ -413,7 +518,7 @@
       document.getElementById('input-owner-phone').value = biz.owner_phone || '';
       document.getElementById('input-policies').value = biz.policies || '';
 
-      const servicesKb = knowledge.find(k => k.content_type === 'services_and_prices');
+      const servicesKb = knowledge.find(k => k.content_type === 'services' || k.content_type === 'prices' || k.content_type === 'services_and_prices');
       if (servicesKb) {
         document.getElementById('input-services-text').value = servicesKb.content;
       }
@@ -477,6 +582,29 @@
         btn.disabled = false;
         btn.innerHTML = '<span>💾</span> Guardar y Actualizar Memoria del Bot';
       }
+    };
+
+    function renderStandCard(b) {
+      if (!b) return;
+      document.getElementById('pstand-name').textContent = b.name || 'Mi Negocio';
+      document.getElementById('pstand-niche').textContent = b.niche || 'Servicio Profesional';
+      document.getElementById('pstand-avatar').textContent = b.bot_avatar || '🤖';
+      document.getElementById('pstand-bot').textContent = b.bot_name || 'tu asistente virtual';
+      document.getElementById('pstand-phone').textContent = b.phone_number || 'WhatsApp Oficial';
+
+      const cleanPhone = (b.phone_number || '').replace(/\D/g, '');
+      const messageText = `¡Hola! Vengo desde el mostrador de ${b.name || 'su negocio'}. Quisiera información sobre servicios, precios y agendar una cita.`;
+      const waLink = cleanPhone ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(messageText)}` : 'https://chatflow.ai';
+      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=450x450&margin=15&data=${encodeURIComponent(waLink)}`;
+      document.getElementById('pstand-qr').src = qrUrl;
+    }
+
+    window.printStand = function() {
+      window.print();
+    };
+
+    window.exportMyAgenda = function() {
+      window.location.href = `/api/portal/${businessId}/export`;
     };
 
     // Carga inicial

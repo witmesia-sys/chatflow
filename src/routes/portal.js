@@ -112,7 +112,6 @@ router.post('/api/portal/:businessId/stock/toggle', async (req, res) => {
         .from('knowledge_base')
         .select('id')
         .eq('business_id', businessId)
-        .eq('content_type', 'out_of_stock')
         .ilike('title', `%${item_name}%`);
 
       if (matches && matches.length > 0) {
@@ -127,7 +126,7 @@ router.post('/api/portal/:businessId/stock/toggle', async (req, res) => {
         business_id: businessId,
         title,
         content,
-        content_type: 'out_of_stock',
+        content_type: 'custom',
         is_active: true
       }).select().single();
 
@@ -178,7 +177,7 @@ router.post('/api/portal/:businessId/profile', async (req, res) => {
         business_id: businessId,
         title: `🚨 Revisión requerida: Cambios inusuales detectados`,
         content: JSON.stringify(anomalyPayload),
-        content_type: 'anomaly_review',
+        content_type: 'custom',
         is_active: false
       });
 
@@ -215,7 +214,7 @@ router.post('/api/portal/:businessId/profile', async (req, res) => {
         .from('knowledge_base')
         .select('id')
         .eq('business_id', businessId)
-        .eq('content_type', 'services_and_prices')
+        .in('content_type', ['services', 'services_and_prices'])
         .limit(1);
 
       if (existingKb && existingKb.length > 0) {
@@ -234,7 +233,7 @@ router.post('/api/portal/:businessId/profile', async (req, res) => {
             business_id: businessId,
             title: 'Menú de Servicios y Precios Actualizado',
             content: services_text.trim(),
-            content_type: 'services_and_prices',
+            content_type: 'services',
             is_active: true
           });
       }

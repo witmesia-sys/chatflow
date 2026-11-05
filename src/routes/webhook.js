@@ -133,7 +133,7 @@ router.post('/', verifySignature, async (req, res) => {
           waMessageId,
         });
 
-        // 6. Enviar respuesta al cliente con soporte de Botones Interactivos
+        // 8. Enviar respuesta al cliente con soporte de Botones Interactivos
         if (aiResponse) {
           const lowerUser = userText.toLowerCase();
           const isGreetingOrGeneral = lowerUser.match(/^(hola|buenas|buen dia|que tal|menu|servicios|precios|info|ayuda)/i);

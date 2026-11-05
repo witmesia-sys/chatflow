@@ -340,7 +340,7 @@
         document.getElementById('kpi-confirmed').textContent = m.confirmed_appointments || 0;
         document.getElementById('kpi-revenue').textContent = `$${m.estimated_revenue_usd || 0}`;
         document.getElementById('kpi-completed').textContent = m.completed_appointments || 0;
-        const outOfStockCount = (data.knowledge || []).filter(k => k.content_type === 'out_of_stock').length;
+        const outOfStockCount = (data.knowledge || []).filter(k => k.content_type === 'out_of_stock' || (k.title || '').includes('AGOTADO')).length;
         document.getElementById('kpi-out').textContent = outOfStockCount;
 
         // Render Agenda
@@ -455,10 +455,10 @@
 
     function renderStock(knowledge) {
       const container = document.getElementById('stock-list');
-      const outOfStockItems = knowledge.filter(k => k.content_type === 'out_of_stock');
+      const outOfStockItems = knowledge.filter(k => k.content_type === 'out_of_stock' || (k.title || '').includes('AGOTADO'));
 
       // Extraer lista común de servicios del negocio
-      const servicesKb = knowledge.find(k => k.content_type === 'services_and_prices');
+      const servicesKb = knowledge.find(k => k.content_type === 'services' || k.content_type === 'prices' || k.content_type === 'services_and_prices');
       let knownServices = ['Corte clásico', 'Corte degradado / fade', 'Barba y perfilado', 'Combo Corte + Barba', 'Lavado y peinado', 'Pomada mate'];
 
       if (servicesKb && servicesKb.content) {

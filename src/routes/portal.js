@@ -249,7 +249,7 @@ router.post('/api/portal/:businessId/profile', async (req, res) => {
         .from('knowledge_base')
         .select('id')
         .eq('business_id', businessId)
-        .in('content_type', ['services', 'services_and_prices'])
+        .in('content_type', ['services', 'prices'])
         .limit(1);
 
       if (existingKb && existingKb.length > 0) {

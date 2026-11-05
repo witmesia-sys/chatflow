@@ -84,13 +84,7 @@ router.post('/', verifySignature, async (req, res) => {
         // 3. Obtener/crear conversación
         const conversation = await getOrCreateConversation(business.id, contact.id, waMessageId);
 
-        // Si está en modo humano, el bot no responde
-        if (conversation.status === 'human_takeover') {
-          logger.info(`Conversación ${conversation.id} en modo humano — bot pausado`);
-          continue;
-        }
-
-        // 4. Interceptar Comandos del Dueño por WhatsApp (#citas, #agotar, #disponible, #bloquear, #ayuda)
+        // 4. Interceptar Comandos del Dueño por WhatsApp (#bot, #citas, #agotar, #disponible, #bloquear, #ayuda)
         const cleanFrom  = String(fromPhone).replace(/\D/g, '');
         const cleanOwner = String(business.owner_phone || '').replace(/\D/g, '');
         const isOwner    = cleanOwner && (cleanFrom === cleanOwner || cleanFrom.endsWith(cleanOwner) || cleanOwner.endsWith(cleanFrom));
@@ -104,13 +98,33 @@ router.post('/', verifySignature, async (req, res) => {
           }
         }
 
-        // 5. Verificar si el usuario pide hablar con un humano
+        // 5. Gestión Inteligente de Modo Humano (Auto-reactivación tras 30 min o saludo)
+        if (conversation.status === 'human_takeover') {
+          const HANDOFF_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutos
+          const lastUpdated = new Date(conversation.updated_at || conversation.created_at).getTime();
+          const timeSinceUpdate = Date.now() - lastUpdated;
+          const isReactivation = userText.toLowerCase().match(/^(#bot|!bot|bot|reactivar|#activar|asistente|hola|buenos d[ií]as|buenas tardes|buenas noches|buenas|hey)/i);
+
+          if (timeSinceUpdate > HANDOFF_TIMEOUT_MS || isReactivation) {
+            logger.info(`Reactivando bot automáticamente para conversación ${conversation.id} (${Math.round(timeSinceUpdate / 60000)} min transcurridos)`);
+            await supabase
+              .from('conversations')
+              .update({ status: 'bot_active', alert_level: null, handoff_reason: null })
+              .eq('id', conversation.id);
+            conversation.status = 'bot_active';
+          } else {
+            logger.info(`Conversación ${conversation.id} en modo humano (${Math.round(timeSinceUpdate / 60000)} min transcurridos) — bot en pausa`);
+            continue;
+          }
+        }
+
+        // 6. Verificar si el usuario solicita asesor humano
         if (checkHandoffTriggers(userText)) {
           await triggerHumanHandoff(business, conversation, contact, fromPhone);
           continue;
         }
 
-        // 6. Llamar al motor de IA
+        // 7. Llamar al motor de IA
         const aiResponse = await handleIncomingMessage({
           business,
           contact,

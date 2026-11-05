@@ -29,17 +29,20 @@ export async function triggerHumanHandoff(business, conversation, contact, fromP
     await sendWhatsAppMessage(
       business,
       fromPhone,
-      '¡Perfecto! Te estoy conectando con un asesor humano ahora mismo. En breve alguien de nuestro equipo te atenderá. 🙏'
+      '¡Perfecto! Te estoy conectando con un asesor humano ahora mismo. En breve alguien de nuestro equipo te atenderá. 🙏\n\n_(Para reactivar al asistente virtual en cualquier momento, escribe *#bot*)_'
     );
 
-    // 3. Notificar al dueño del negocio
+    // 3. Notificar al dueño del negocio (solo si es un número distinto al del cliente)
     if (business.owner_phone) {
       const cleanOwner = String(business.owner_phone).replace(/\D/g, '');
-      await sendWhatsAppMessage(
-        business,
-        cleanOwner,
-        `🚨 *ALERTA ChatFlow AI*\n\nEl cliente *${contact.full_name ?? contact.phone}* necesita atención humana.\n📱 Número: +${contact.phone}\n\nResponde directamente por WhatsApp.`
-      );
+      const cleanFrom  = String(fromPhone).replace(/\D/g, '');
+      if (cleanOwner && cleanOwner !== cleanFrom) {
+        await sendWhatsAppMessage(
+          business,
+          cleanOwner,
+          `🚨 *ALERTA ChatFlow AI*\n\nEl cliente *${contact.full_name ?? contact.phone}* necesita atención humana.\n📱 Número: +${contact.phone}\n\nResponde directamente por WhatsApp.`
+        );
+      }
     }
 
     logger.warn(`Handoff activado — conversación ${conversation.id}, contacto ${contact.phone}`);

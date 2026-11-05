@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { verifySignature } from '../middleware/verify-signature.js';
 import { handleIncomingMessage } from '../services/openai.js';
-import { sendWhatsAppMessage } from '../services/whatsapp.js';
+import { sendWhatsAppMessage, sendWhatsAppButtons } from '../services/whatsapp.js';
 import { getBusinessByPhone, upsertContact, getOrCreateConversation } from '../services/supabase.js';
 import { checkHandoffTriggers, triggerHumanHandoff } from '../services/handoff.js';
 import { handleOwnerCommand } from '../services/ownerCommands.js';
@@ -38,14 +38,24 @@ router.post('/', verifySignature, async (req, res) => {
 
         const value   = change.value;
         const message = value?.messages?.[0];
-        if (!message || message.type !== 'text') continue;
+        if (!message) continue;
+
+        let userText = '';
+        if (message.type === 'text') {
+          userText = message.text?.body?.trim() || '';
+        } else if (message.type === 'interactive') {
+          userText = message.interactive?.button_reply?.title || message.interactive?.list_reply?.title || '';
+        } else {
+          continue;
+        }
+
+        if (!userText) continue;
 
         const waMessageId   = message.id;
         const fromPhone     = message.from;
         const businessPhone = value.metadata?.display_phone_number;
-        const userText      = message.text.body.trim();
 
-        logger.info(`Mensaje de ${fromPhone}: "${userText}"`);
+        logger.info(`Mensaje [${message.type}] de ${fromPhone}: "${userText}"`);
 
         // 1. Identificar negocio
         const business = await getBusinessByPhone(businessPhone);
@@ -109,9 +119,22 @@ router.post('/', verifySignature, async (req, res) => {
           waMessageId,
         });
 
-        // 6. Enviar respuesta al cliente
+        // 6. Enviar respuesta al cliente con soporte de Botones Interactivos
         if (aiResponse) {
-          await sendWhatsAppMessage(business, fromPhone, aiResponse);
+          const lowerUser = userText.toLowerCase();
+          const isGreetingOrGeneral = lowerUser.match(/^(hola|buenas|buen dia|que tal|menu|servicios|precios|info|ayuda)/i);
+          const isBookingIntent = lowerUser.includes('agendar') || lowerUser.includes('reservar') || lowerUser.includes('cita');
+
+          if (isGreetingOrGeneral && !isBookingIntent && !aiResponse.includes('COMPROBANTE DE RESERVA')) {
+            await sendWhatsAppButtons(
+              business,
+              fromPhone,
+              aiResponse,
+              ['📅 Agendar Cita', '✂️ Precios / Servicios', '📍 Ubicación']
+            );
+          } else {
+            await sendWhatsAppMessage(business, fromPhone, aiResponse);
+          }
         }
       }
     }

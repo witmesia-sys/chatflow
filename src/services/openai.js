@@ -344,9 +344,10 @@ export async function handleIncomingMessage({ business, contact, conversation, u
 _Notificación enviada automáticamente a tu WhatsApp_`;
 
         if (business.owner_phone) {
+          const cleanOwner = String(business.owner_phone).replace(/\D/g, '');
           try {
-            await sendWhatsAppMessage(business, business.owner_phone, ownerAlert);
-            logger.info(`Alerta enviada al dueño: ${business.owner_phone}`);
+            await sendWhatsAppMessage(business, cleanOwner, ownerAlert);
+            logger.info(`Alerta enviada al dueño: ${cleanOwner}`);
           } catch (e) {
             logger.warn(`No se pudo enviar alerta al dueño: ${e.message}`);
           }

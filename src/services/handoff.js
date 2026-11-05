@@ -34,10 +34,11 @@ export async function triggerHumanHandoff(business, conversation, contact, fromP
 
     // 3. Notificar al dueño del negocio
     if (business.owner_phone) {
+      const cleanOwner = String(business.owner_phone).replace(/\D/g, '');
       await sendWhatsAppMessage(
         business,
-        business.owner_phone,
-        `🚨 *ALERTA ChatFlow AI*\n\nEl cliente *${contact.full_name ?? contact.phone}* necesita atención humana.\n📱 Número: ${contact.phone}\n\nResponde directamente por WhatsApp.`
+        cleanOwner,
+        `🚨 *ALERTA ChatFlow AI*\n\nEl cliente *${contact.full_name ?? contact.phone}* necesita atención humana.\n📱 Número: +${contact.phone}\n\nResponde directamente por WhatsApp.`
       );
     }
 

@@ -80,6 +80,40 @@ router.get('/api/portal/:businessId', async (req, res) => {
   }
 });
 
+// GET /api/portal/:businessId/export — Descargar reporte CSV de citas
+router.get('/api/portal/:businessId/export', async (req, res) => {
+  try {
+    const { businessId } = req.params;
+    const { data: biz } = await supabase.from('businesses').select('name').eq('id', businessId).single();
+    const { data: appts, error } = await supabase
+      .from('appointments')
+      .select('*, contacts(full_name, phone)')
+      .eq('business_id', businessId)
+      .order('created_at', { ascending: false });
+
+    if (error) return res.status(500).json({ error: error.message });
+
+    const safeBizName = (biz?.name || 'citas').replace(/[^a-zA-Z0-9_-]/g, '_');
+    let csv = '\uFEFFTicket,Cliente,Teléfono,Servicio,Estado,Detalle / Horario,Fecha Creación\r\n';
+    (appts || []).forEach(a => {
+      const ticket = `"${(a.idempotency_key || a.id || '').replace(/"/g, '""')}"`;
+      const clientName = `"${(a.contacts?.full_name || a.notes?.match(/Cliente:\s*([^|]+)/i)?.[1]?.trim() || 'Cliente').replace(/"/g, '""')}"`;
+      const clientPhone = `"+${(a.contacts?.phone || '').replace(/\D/g, '')}"`;
+      const service = `"${(a.service_name || 'General').replace(/"/g, '""')}"`;
+      const status = `"${(a.status || 'confirmed').replace(/"/g, '""')}"`;
+      const notes = `"${(a.notes || '').replace(/"/g, '""')}"`;
+      const date = a.created_at ? new Date(a.created_at).toLocaleString('es-ES') : '-';
+      csv += `${ticket},${clientName},${clientPhone},${service},${status},${notes},${date}\r\n`;
+    });
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="reporte_citas_${safeBizName}.csv"`);
+    res.send(csv);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // PATCH /api/portal/:businessId/appointments/:id
 router.patch('/api/portal/:businessId/appointments/:id', async (req, res) => {
   try {

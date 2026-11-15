@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import { verifySignature } from '../middleware/verify-signature.js';
 import { handleIncomingMessage } from '../services/openai.js';
-import { sendWhatsAppMessage, sendWhatsAppButtons } from '../services/whatsapp.js';
-import { getBusinessByPhone, upsertContact, getOrCreateConversation, supabase } from '../services/supabase.js';
+import { sendWhatsAppMessage, sendWhatsAppButtons, sendWhatsAppImage } from '../services/whatsapp.js';
+import { getBusinessByPhone, upsertContact, getOrCreateConversation, saveMessage, supabase } from '../services/supabase.js';
 import { checkHandoffTriggers, triggerHumanHandoff } from '../services/handoff.js';
 import { handleOwnerCommand } from '../services/ownerCommands.js';
 import { logger } from '../utils/logger.js';
@@ -41,15 +41,22 @@ router.post('/', verifySignature, async (req, res) => {
         if (!message) continue;
 
         let userText = '';
+        let isImage  = false;
+        let imageId  = null;
+
         if (message.type === 'text') {
           userText = message.text?.body?.trim() || '';
         } else if (message.type === 'interactive') {
           userText = message.interactive?.button_reply?.title || message.interactive?.list_reply?.title || '';
+        } else if (message.type === 'image') {
+          isImage  = true;
+          imageId  = message.image?.id;
+          userText = message.image?.caption?.trim() || '[Comprobante de pago o imagen recibida]';
         } else {
           continue;
         }
 
-        if (!userText) continue;
+        if (!userText && !isImage) continue;
 
         const waMessageId   = message.id;
         const fromPhone     = message.from;
@@ -83,6 +90,39 @@ router.post('/', verifySignature, async (req, res) => {
 
         // 3. Obtener/crear conversación
         const conversation = await getOrCreateConversation(business.id, contact.id, waMessageId);
+
+        // 📸 GESTIÓN DE COMPROBANTE DE PAGO O IMAGEN ENVIADA POR EL CLIENTE
+        if (isImage) {
+          logger.info(`📸 Comprobante/Imagen recibida de ${fromPhone} (Media ID: ${imageId})`);
+
+          // 1. Alerta inmediata al WhatsApp personal del dueño
+          if (business.owner_phone) {
+            const cleanOwner = String(business.owner_phone).replace(/\D/g, '');
+            const cleanFrom  = String(fromPhone).replace(/\D/g, '');
+            if (cleanOwner && cleanOwner !== cleanFrom) {
+              const alertMsg = `📸 *¡NUEVO COMPROBANTE DE PAGO / IMAGEN RECIBIDA!*\n━━━━━━━━━━━━━━━━━━━━━\n🏪 *Negocio:* ${business.name}\n👤 *Cliente:* ${contact.full_name || 'Cliente'}\n📱 *WhatsApp:* +${cleanFrom}\n💬 *Mensaje/Detalle:* ${message.image?.caption || 'Captura de pantalla de comprobante'}\n━━━━━━━━━━━━━━━━━━━━━\n_Verifica en tu cuenta bancaria o chat para confirmar la acreditación y entrega._`;
+
+              try {
+                await sendWhatsAppImage(business, cleanOwner, imageId, alertMsg);
+              } catch (e) {
+                await sendWhatsAppMessage(business, cleanOwner, alertMsg);
+              }
+            }
+          }
+
+          // 2. Confirmación inmediata y profesional al cliente
+          const ackMsg = `¡Muchas gracias! He recibido tu comprobante de pago 📸.\n\nSe lo acabo de pasar al encargado para verificar la acreditación en el banco. En breve te confirmamos tu entrega o acceso formal. 🙌`;
+          await sendWhatsAppMessage(business, fromPhone, ackMsg);
+
+          await saveMessage({
+            conversationId: conversation.id,
+            businessId:     business.id,
+            role:           'assistant',
+            content:        ackMsg,
+          });
+
+          continue;
+        }
 
         // 4. Interceptar Comandos del Dueño por WhatsApp (#bot, #citas, #agotar, #disponible, #bloquear, #ayuda)
         const cleanFrom  = String(fromPhone).replace(/\D/g, '');

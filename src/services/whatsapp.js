@@ -140,3 +140,43 @@ export async function sendWhatsAppList(business, toPhone, bodyText, buttonTitle 
     return sendWhatsAppMessage(business, cleanTo, bodyText);
   }
 }
+
+/**
+ * Enviar imagen por WhatsApp (soporta URL pública https://... o media_id de Meta)
+ */
+export async function sendWhatsAppImage(business, toPhone, imageSource, caption = '') {
+  const noteToken = business.notes?.match(/wa_token:\s*([^\s;]+)/i)?.[1]?.trim();
+  const token   = business._wa_token || business.wa_token || noteToken || process.env.WHATSAPP_ACCESS_TOKEN;
+  const phoneId = (business.whatsapp_phone_id && String(business.whatsapp_phone_id).trim()) || process.env.WHATSAPP_PHONE_NUMBER_ID;
+  const cleanTo = String(toPhone).replace(/\D/g, '');
+
+  const isUrl = typeof imageSource === 'string' && (imageSource.startsWith('http://') || imageSource.startsWith('https://'));
+  const imagePayload = isUrl ? { link: imageSource } : { id: imageSource };
+  if (caption) imagePayload.caption = caption.substring(0, 1024);
+
+  try {
+    const res = await axios.post(
+      `${META_API_BASE}/${phoneId}/messages`,
+      {
+        messaging_product: 'whatsapp',
+        recipient_type:    'individual',
+        to:                cleanTo,
+        type:              'image',
+        image:             imagePayload,
+      },
+      {
+        headers: {
+          Authorization:  `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+    return res.data;
+  } catch (err) {
+    logger.error('Error enviando imagen por WhatsApp:', err.response?.data?.error || err.message);
+    if (caption) {
+      return sendWhatsAppMessage(business, cleanTo, caption);
+    }
+    throw err;
+  }
+}

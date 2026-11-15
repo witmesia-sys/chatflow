@@ -1,15 +1,21 @@
 import 'dotenv/config';
 import express from 'express';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 import webhookRouter from './routes/webhook.js';
 import portalRouter from './routes/portal.js';
 import { logger } from './utils/logger.js';
 
+const __dirname = dirname(fileURLToPath(import.meta.url));
 const app  = express();
 const PORT = process.env.PORT || 3000;
 
+// Servir archivos estáticos (incluye carpeta public/uploads para imágenes de catálogo)
+app.use(express.static(join(__dirname, '..', 'public')));
+
 // Raw body para validación HMAC de Meta (debe ir ANTES del json middleware)
 app.use('/webhook', express.raw({ type: 'application/json' }));
-app.use(express.json());
+app.use(express.json({ limit: '25mb' }));
 
 app.use('/webhook', webhookRouter);
 app.use('/', portalRouter);

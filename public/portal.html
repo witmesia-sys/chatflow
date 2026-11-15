@@ -112,18 +112,21 @@
     </div>
 
     <!-- Navegación de Pestañas Móviles -->
-    <div class="grid grid-cols-4 gap-1 bg-slate-900/80 p-1 rounded-xl border border-white/10 text-xs">
-      <button onclick="window.switchTab('agenda')" id="tab-btn-agenda" class="py-2 rounded-lg font-bold transition-all text-center bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center justify-center gap-1">
-        <span>📅</span> Agenda
+    <div class="grid grid-cols-5 gap-1 bg-slate-900/80 p-1 rounded-xl border border-white/10 text-[11px]">
+      <button onclick="window.switchTab('agenda')" id="tab-btn-agenda" class="py-2 rounded-lg font-bold transition-all text-center bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center justify-center gap-0.5">
+        <span>📅</span> Citas
       </button>
-      <button onclick="window.switchTab('stock')" id="tab-btn-stock" class="py-2 rounded-lg font-semibold transition-all text-center text-gray-400 hover:text-white flex items-center justify-center gap-1">
+      <button onclick="window.switchTab('stock')" id="tab-btn-stock" class="py-2 rounded-lg font-semibold transition-all text-center text-gray-400 hover:text-white flex items-center justify-center gap-0.5">
         <span>📦</span> Stock
       </button>
-      <button onclick="window.switchTab('stand')" id="tab-btn-stand" class="py-2 rounded-lg font-semibold transition-all text-center text-gray-400 hover:text-white flex items-center justify-center gap-1">
-        <span>🖨️</span> Stand QR
+      <button onclick="window.switchTab('photos')" id="tab-btn-photos" class="py-2 rounded-lg font-semibold transition-all text-center text-gray-400 hover:text-white flex items-center justify-center gap-0.5">
+        <span>📸</span> Fotos
       </button>
-      <button onclick="window.switchTab('profile')" id="tab-btn-profile" class="py-2 rounded-lg font-semibold transition-all text-center text-gray-400 hover:text-white flex items-center justify-center gap-1">
-        <span>⚙️</span> Negocio
+      <button onclick="window.switchTab('stand')" id="tab-btn-stand" class="py-2 rounded-lg font-semibold transition-all text-center text-gray-400 hover:text-white flex items-center justify-center gap-0.5">
+        <span>🖨️</span> Stand
+      </button>
+      <button onclick="window.switchTab('profile')" id="tab-btn-profile" class="py-2 rounded-lg font-semibold transition-all text-center text-gray-400 hover:text-white flex items-center justify-center gap-0.5">
+        <span>⚙️</span> Perfil
       </button>
     </div>
 
@@ -163,6 +166,47 @@
 
       <div id="stock-list" class="space-y-2">
         <div class="glass rounded-xl p-6 text-center text-xs text-gray-500">Cargando catálogo...</div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════ -->
+    <!-- TAB: FOTOS & CATÁLOGO VISUAL                            -->
+    <!-- ══════════════════════════════════════════════════════ -->
+    <div id="tab-photos" style="display: none;" class="space-y-4">
+      <div class="glass rounded-2xl p-4 border border-white/10 space-y-3">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-sm font-bold text-white flex items-center gap-2">
+              <span>📸</span> Catálogo Visual & Muestras
+            </h2>
+            <p class="text-[11px] text-gray-400">Fotos que el bot enviará por WhatsApp cuando los clientes pidan ver fotos o modelos.</p>
+          </div>
+          <button onclick="document.getElementById('photo-file-input').click()" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold shadow transition-all cursor-pointer flex items-center gap-1">
+            <span>+</span> Subir Foto
+          </button>
+        </div>
+
+        <input type="file" id="photo-file-input" accept="image/*" class="hidden" onchange="window.handlePhotoSelect(event)">
+
+        <!-- Formulario desplegable de subida -->
+        <div id="photo-upload-form" class="hidden p-3 bg-slate-900/90 rounded-xl border border-emerald-500/30 space-y-2.5">
+          <div class="flex items-center gap-3">
+            <img id="photo-preview" class="w-16 h-16 object-cover rounded-lg border border-white/20 bg-slate-800" alt="Preview">
+            <div class="flex-1 space-y-1.5">
+              <input type="text" id="photo-prod-name" placeholder="Nombre del producto o servicio (ej. Corte Degradado)" class="w-full bg-slate-800 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500">
+              <input type="text" id="photo-prod-desc" placeholder="Descripción breve (opcional)" class="w-full bg-slate-800 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500">
+            </div>
+          </div>
+          <div class="flex justify-end gap-2">
+            <button onclick="window.cancelPhotoUpload()" class="px-3 py-1 text-xs text-gray-400 hover:text-white cursor-pointer">Cancelar</button>
+            <button onclick="window.submitPhotoUpload()" id="btn-submit-photo" class="px-3.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold cursor-pointer">Guardar en Bot</button>
+          </div>
+        </div>
+
+        <!-- Grid de Fotos del Catálogo -->
+        <div id="photos-grid" class="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-2">
+          <!-- Renderizado dinámico -->
+        </div>
       </div>
     </div>
 
@@ -308,15 +352,15 @@
 
     window.switchTab = function(tab) {
       currentTab = tab;
-      ['agenda', 'stock', 'stand', 'profile'].forEach(t => {
+      ['agenda', 'stock', 'photos', 'stand', 'profile'].forEach(t => {
         const view = document.getElementById('tab-' + t);
         const btn = document.getElementById('tab-btn-' + t);
         if (view) view.style.display = (t === tab) ? 'block' : 'none';
         if (btn) {
           if (t === tab) {
-            btn.className = 'py-2 rounded-lg font-bold transition-all text-center bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center justify-center gap-1';
+            btn.className = 'py-2 rounded-lg font-bold transition-all text-center bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center justify-center gap-0.5';
           } else {
-            btn.className = 'py-2 rounded-lg font-semibold transition-all text-center text-gray-400 hover:text-white flex items-center justify-center gap-1';
+            btn.className = 'py-2 rounded-lg font-semibold transition-all text-center text-gray-400 hover:text-white flex items-center justify-center gap-0.5';
           }
         }
       });
@@ -348,6 +392,9 @@
 
         // Render Stock
         renderStock(data.knowledge || []);
+
+        // Render Fotos
+        renderPhotos(data.knowledge || []);
 
         // Render Stand QR
         renderStandCard(b);
@@ -507,6 +554,127 @@
       const item = prompt('Escribe el nombre del producto o servicio que se agotó:');
       if (item && item.trim()) {
         window.toggleStockItem(item.trim(), false);
+      }
+    };
+
+    // ══════════════════════════════════════════════════════
+    // GESTIÓN DE FOTOS DEL CATÁLOGO
+    // ══════════════════════════════════════════════════════
+    let selectedPhotoBase64 = null;
+
+    function renderPhotos(knowledge) {
+      const container = document.getElementById('photos-grid');
+      const photoItems = (knowledge || []).filter(k => (k.title || '').includes('📸 FOTO_PRODUCTO:'));
+
+      if (!photoItems.length) {
+        container.innerHTML = `
+          <div class="col-span-full glass rounded-xl p-6 text-center text-gray-500 text-xs">
+            Aún no has subido fotos de tus productos. Toca "+ Subir Foto" para agregar imágenes de tus servicios, cortes, artículos o muestras.
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = photoItems.map(p => {
+        const prodName = p.title.replace('📸 FOTO_PRODUCTO:', '').trim();
+        const urlMatch = (p.content || '').match(/Enlace de imagen:\s*(https?:\/\/[^\s]+)/i);
+        const imgUrl = urlMatch ? urlMatch[1] : '';
+
+        return `
+          <div class="glass rounded-xl p-2.5 border border-white/10 space-y-2 flex flex-col justify-between">
+            ${imgUrl ? `
+              <img src="${imgUrl}" alt="${prodName}" class="w-full h-28 object-cover rounded-lg bg-slate-900 border border-white/5" onerror="this.src='https://placehold.co/400x300/1e293b/94a3b8?text=Foto+Catálogo'">
+            ` : `
+              <div class="w-full h-28 bg-slate-800 rounded-lg flex items-center justify-center text-2xl">📸</div>
+            `}
+            <div>
+              <div class="font-bold text-white text-xs truncate" title="${prodName}">${prodName}</div>
+              <div class="text-[10px] text-emerald-400">✅ Activo en Bot</div>
+            </div>
+            <button onclick="window.deletePhoto('${p.id}', '${prodName}')" class="w-full py-1 bg-slate-800 hover:bg-rose-900/60 text-gray-400 hover:text-rose-300 rounded-lg text-[11px] font-semibold border border-white/5 cursor-pointer transition-all">
+              🗑️ Eliminar
+            </button>
+          </div>
+        `;
+      }).join('');
+    }
+
+    window.handlePhotoSelect = function(e) {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        selectedPhotoBase64 = evt.target.result;
+        document.getElementById('photo-preview').src = selectedPhotoBase64;
+        document.getElementById('photo-prod-name').value = file.name.replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' ');
+        document.getElementById('photo-upload-form').classList.remove('hidden');
+      };
+      reader.readAsDataURL(file);
+    };
+
+    window.cancelPhotoUpload = function() {
+      selectedPhotoBase64 = null;
+      document.getElementById('photo-file-input').value = '';
+      document.getElementById('photo-upload-form').classList.add('hidden');
+    };
+
+    window.submitPhotoUpload = async function() {
+      const prodName = document.getElementById('photo-prod-name').value.trim();
+      const prodDesc = document.getElementById('photo-prod-desc').value.trim();
+
+      if (!prodName) {
+        toast('Por favor escribe el nombre del producto o foto', true);
+        return;
+      }
+      if (!selectedPhotoBase64) {
+        toast('No se ha seleccionado ninguna imagen', true);
+        return;
+      }
+
+      const btn = document.getElementById('btn-submit-photo');
+      btn.disabled = true;
+      btn.textContent = 'Guardando...';
+
+      try {
+        const res = await fetch(`/api/portal/${businessId}/photos`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            product_name: prodName,
+            image_base64: selectedPhotoBase64,
+            description: prodDesc,
+          })
+        });
+
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error || 'Error al guardar foto');
+        }
+
+        toast(`📸 Foto de "${prodName}" guardada en el bot con éxito.`);
+        window.cancelPhotoUpload();
+        await window.loadPortalData();
+      } catch (err) {
+        toast(err.message, true);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Guardar en Bot';
+      }
+    };
+
+    window.deletePhoto = async function(id, name) {
+      if (!confirm(`¿Eliminar la foto de "${name}" del catálogo del bot?`)) return;
+
+      try {
+        const res = await fetch(`/api/portal/${businessId}/photos/${id}`, {
+          method: 'DELETE'
+        });
+        if (!res.ok) throw new Error('Error al eliminar foto');
+        toast(`Foto de "${name}" eliminada.`);
+        await window.loadPortalData();
+      } catch (e) {
+        toast(e.message, true);
       }
     };
 

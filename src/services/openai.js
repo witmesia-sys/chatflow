@@ -5,7 +5,7 @@
  */
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { getKnowledgeBase, getUpcomingAppointments, saveMessage, logUsage, supabase } from './supabase.js';
-import { sendWhatsAppMessage } from './whatsapp.js';
+import { sendWhatsAppMessage, sendWhatsAppImage } from './whatsapp.js';
 import { checkCalendarAvailability, createCalendarEvent } from './calendar.js';
 import { logger } from '../utils/logger.js';
 
@@ -54,7 +54,7 @@ function sanitizeGeminiHistory(rawHistory) {
   return clean;
 }
 
-// Herramienta nativa de emisión de ticket y alerta al dueño
+// Herramientas nativas de agendamiento, confirmación de pagos y catálogo visual
 const BOOKING_TOOL = [{
   functionDeclarations: [
     {
@@ -69,6 +69,34 @@ const BOOKING_TOOL = [{
           datetime_text: { type: 'STRING', description: 'Fecha y hora pactada (ej. Mañana a las 10:00 AM)' }
         },
         required: ['client_name', 'service_name', 'datetime_text']
+      }
+    },
+    {
+      name: 'notify_payment_transfer',
+      description: 'Notifica al dueño del negocio y genera acuse de recibo cuando el cliente indica haber realizado el pago (Pago Móvil, Zelle, Transferencia, Binance) o envía el número de referencia bancaria para su validación.',
+      parameters: {
+        type: 'OBJECT',
+        properties: {
+          client_name:      { type: 'STRING', description: 'Nombre del cliente' },
+          payment_method:   { type: 'STRING', description: 'Método utilizado (ej. Pago Móvil, Zelle, Transferencia, Binance, Efectivo)' },
+          reference_number: { type: 'STRING', description: 'Número de referencia bancaria o datos del pago reportado' },
+          amount_paid:      { type: 'STRING', description: 'Monto pagado si el cliente lo indicó (ej. $15 o Bs 750)' },
+          product_name:     { type: 'STRING', description: 'Nombre del producto o servicio comprado' }
+        },
+        required: ['client_name', 'reference_number']
+      }
+    },
+    {
+      name: 'send_catalog_photo',
+      description: 'Envía una foto de un producto, muestra, catálogo o trabajo previo al WhatsApp del cliente cuando este solicita ver fotos, modelos o el producto.',
+      parameters: {
+        type: 'OBJECT',
+        properties: {
+          product_name: { type: 'STRING', description: 'Nombre del producto, servicio o corte solicitado' },
+          photo_url:    { type: 'STRING', description: 'URL de la foto encontrada en la base de conocimiento' },
+          caption:      { type: 'STRING', description: 'Mensaje descriptivo que acompañará la foto' }
+        },
+        required: ['product_name']
       }
     }
   ]
@@ -235,16 +263,49 @@ function buildSystemPrompt(business, knowledgeChunks, upcomingAppointments = [])
       }).join('\n')
     : 'No hay citas registradas recientemente en la agenda.';
 
+  const n = (business.niche || '').toLowerCase();
+  const notes = (business.notes || '').toLowerCase();
+  const isSales = n.includes('venta') || n.includes('curso') || n.includes('tienda') || n.includes('infoproducto') || n.includes('ecommerce') || n.includes('comercio') || n.includes('ropa') || n.includes('zapato') || notes.includes('[mode:sales]');
+  const isSupport = n.includes('soporte') || n.includes('atencion') || notes.includes('[mode:support]');
+
+  let businessMission = '';
+  let specificProtocol = '';
+
+  if (isSales) {
+    businessMission = 'Tu ÚNICO objetivo es ASESORAR, REBATIR OBJECIONES Y CERRAR VENTAS del producto o curso. Sé persuasivo, empático y orientado a la conversión.';
+    specificProtocol = `7. PROTOCOLO DE VENTAS, OBJECIONES Y PAGO MÓVIL:
+   - MANEJO DE OBJECIONES:
+     • Si dice que "está caro": Explica el valor y la transformación que obtendrá vs el costo de no solucionar su problema.
+     • Si dice "lo voy a pensar" o "te aviso luego": Pregunta amablemente: "¿Hay alguna duda puntual sobre el temario o la entrega que te gustaría aclarar antes de que termine el precio especial de hoy?"
+     • Si tiene dudas de confianza o garantía: Explica la entrega inmediata y la garantía de satisfacción.
+     • Si dice "no tengo tiempo": Explica que el material es a su propio ritmo.
+   - PAGO MÓVIL Y DATOS BANCARIOS:
+     • Cuando el cliente decida comprar o pida los datos, entrégale los datos de pago (Pago Móvil / Zelle / Binance) claros y ordenados de la base de conocimiento.
+     • Pide SIEMPRE: "Una vez realizado el pago, por favor envíame por aquí la captura de pantalla o el número de referencia bancaria para validar tu acreditación y habilitarte el acceso de inmediato."
+     • En cuanto el cliente escriba el número de referencia o confirme la transferencia, DEBES EJECUTAR INMEDIATAMENTE la herramienta "notify_payment_transfer" con los datos de la venta.`;
+  } else if (isSupport) {
+    businessMission = 'Tu misión primordial es escuchar con empatía, responder dudas con precisión, calificar necesidades y orientar al cliente hacia la mejor solución.';
+    specificProtocol = `7. PROTOCOLO DE ATENCIÓN Y CALIFICACIÓN:
+   - Escucha activamente la situación del cliente. Haz preguntas clave para entender su requerimiento.
+   - Si requiere atención personalizada especializada, sugiérele contactar a un asesor escribiendo "humano".`;
+  } else {
+    businessMission = 'Tu misión primordial es guiar al cliente a resolver dudas y AGENDAR SU CITA o turno en los horarios disponibles.';
+    specificProtocol = `7. PROTOCOLO DE AGENDAMIENTO Y EMISIÓN DE TICKET:
+   - Cuando el cliente indique que quiere reservar o mencione un día u hora (ej. "mañana a las 10am"), valida que no choque con las citas ocupadas y pregúntale su nombre si aún no lo sabes.
+   - En el instante en que tengas: 1) El servicio elegido, 2) La fecha y hora pactada, y 3) El nombre del cliente, DEBES EJECUTAR INMEDIATAMENTE la herramienta "register_and_confirm_booking" con esos datos para emitir el ticket formal y alertar al dueño.`;
+  }
+
   return `Eres ${persona.name}, ${genderTitle} de "${business.name}".
 PERSONALIDAD: ${persona.personality}
 ${grammarGuide}
 IDENTIDAD: Si el cliente te pregunta tu nombre o quién eres, preséntate con simpatía y orgullo: "¡Hola! Soy ${persona.name}, asistente de ${business.name} 😊".
 
-Tu misión: responder de forma CONCISA, natural y humana (máximo 2 a 3 frases, estilo WhatsApp), guiando al cliente a resolver dudas y agendar su cita.
+Tu misión: responder de forma CONCISA, natural y humana (máximo 2 a 3 frases, estilo WhatsApp).
+${businessMission}
 
 TONO: ${tone}
 
-BASE DE CONOCIMIENTO (SERVICIOS, PRECIOS, STOCK Y NOVEDADES):
+BASE DE CONOCIMIENTO (SERVICIOS, PRECIOS, STOCK, CUENTAS DE PAGO Y NOVEDADES):
 ${knowledge}
 
 CITAS Y TURNOS YA RESERVADOS EN LA AGENDA (HORARIOS OCUPADOS):
@@ -257,12 +318,18 @@ REGLAS ESTRICTAS DE CONVERSACIÓN:
 1. NO REPETIR SALUDOS: Si la conversación ya empezó o el cliente ya saludó antes, NUNCA vuelvas a decir "¡Hola!", "Buen día" ni "Buenas noches". Ve directo a responder lo que pide.
 2. DISPONIBILIDAD DE HORARIOS: Si el cliente pide un día u hora que coincide con los turnos reservados arriba, indícale amablemente: "Ese turno específico ya se encuentra reservado, pero con gusto te puedo agendar a las [proponer horas disponibles]" dentro del horario de atención.
 3. PRODUCTOS Y SERVICIOS AGOTADOS: Si en la base de conocimiento algún servicio o producto aparece listado como AGOTADO o NO DISPONIBLE, NO permitas reservarlo ni comprarlo; explica amablemente que está agotado por el momento y sugiere la mejor opción alterna.
-4. CERO INVENTOS DE PRECIOS: Si preguntan por un precio o servicio no registrado en la base de conocimiento, responde: "Prefiero comunicarte con un asesor para darte esa cotización exacta." No inventes precios.
-5. DOMAIN LOCK: Si preguntan por temas ajenos al negocio, responde: "Estoy aquí exclusivamente para ayudarte con información sobre nuestros servicios y citas en ${business.name}. ¿En qué te puedo colaborar?"
+4. CERO INVENTOS DE PRECIOS O DATOS BANCARIOS: Si preguntan por un precio o cuenta no registrada en la base de conocimiento, responde: "Prefiero comunicarte con un asesor para darte esa cotización exacta." No inventes precios ni números de cuenta.
+5. DOMAIN LOCK: Si preguntan por temas ajenos al negocio, responde con ingenio breve y regresa al objetivo.
 6. BREVEDAD: Máximo 2 o 3 frases por mensaje. Estilo WhatsApp ágil.
-7. PROTOCOLO DE AGENDAMIENTO Y EMISIÓN DE TICKET:
-   - Cuando el cliente indique que quiere reservar o mencione un día u hora (ej. "mañana a las 10am"), valida que no choque con las citas ocupadas y pregúntale su nombre si aún no lo sabes.
-   - En el instante en que tengas: 1) El servicio elegido, 2) La fecha y hora pactada, y 3) El nombre del cliente, DEBES EJECUTAR INMEDIATAMENTE la herramienta "register_and_confirm_booking" con esos datos para emitir el ticket formal y alertar al dueño.`;
+${specificProtocol}
+8. REGLA SUPREMA DE REENCAMINAMIENTO CONVERSACIONAL (BRIDGE BACK):
+   - PROHIBIDO TERMINANTEMENTE DECIR "estoy en mantenimiento", "inconveniente técnico", "no puedo ayudarte con eso" o sonar como un robot descompuesto.
+   - Si el cliente hace preguntas fuera del tema, comentarios cotidianos, preguntas curiosas o se sale del carril: responde con amabilidad, ingenio y una pizca de carisma o sentido común breve (1 frase), y DE INMEDIATO TIENDE UN PUENTE CONVERSACIONAL para volver a la conversación de valor/venta/cita.
+     • Ejemplo: "¡Jaja totalmente de acuerdo! 😄 Y hablando de avanzar, ¿te gustaría que te pase los datos para aprovechar la promo de hoy?"
+     • Ejemplo: "¡Qué buen punto! Por cierto, ¿qué horario te vendría mejor para agendarte esta semana?"
+9. FOTOS Y MUESTRAS DEL CATÁLOGO:
+   - Si el cliente pide fotos, muestras o ver el producto ("tienes fotos?", "cómo es el modelo?", "puedo ver muestras?"):
+   - Si en la base de conocimiento hay referencias de fotos (ej. [📸 FOTO_PRODUCTO: ...]), ejecuta la herramienta "send_catalog_photo" para enviarle la foto directamente a su WhatsApp o compártele el enlace con entusiasmo.`;
 }
 
 export async function handleIncomingMessage({ business, contact, conversation, userText, waMessageId }) {
@@ -380,6 +447,46 @@ _Notificación enviada automáticamente a tu WhatsApp_`;
 
         // 4. Respuesta directa al cliente con el ticket oficial (sin latencia de segundo llamado a Gemini)
         response = `¡Listo, ${client_name}! ${persona.name} ha confirmado tu cita con éxito. 🎉\n\n${customerTicket}`;
+      } else if (fnCall.name === 'notify_payment_transfer') {
+        const { client_name, payment_method, reference_number, amount_paid, product_name } = fnCall.args;
+
+        // 1. Alerta inmediata al WhatsApp del dueño
+        const ownerPaymentAlert = `💰 *¡NUEVO PAGO REPORTADO POR CLIENTE!*
+━━━━━━━━━━━━━━━━━━━━━
+🏪 *Negocio:* ${business.name}
+👤 *Cliente:* ${client_name || contact.full_name || 'Cliente'}
+📱 *WhatsApp Cliente:* +${contact.phone}
+💳 *Método:* ${payment_method || 'Pago Móvil / Transferencia'}
+🔢 *Referencia:* ${reference_number}
+💵 *Monto:* ${amount_paid || 'Monto acordado'}
+📦 *Producto/Servicio:* ${product_name || 'Venta'}
+━━━━━━━━━━━━━━━━━━━━━
+_Verifica en tu cuenta bancaria y envía el producto o acceso al cliente._`;
+
+        if (business.owner_phone) {
+          const cleanOwner = String(business.owner_phone).replace(/\D/g, '');
+          try {
+            await sendWhatsAppMessage(business, cleanOwner, ownerPaymentAlert);
+            logger.info(`Alerta de pago enviada al dueño: ${cleanOwner}`);
+          } catch (e) {
+            logger.warn(`No se pudo enviar alerta de pago al dueño: ${e.message}`);
+          }
+        }
+
+        // 2. Respuesta directa al cliente
+        response = `¡Excelente, ${client_name || 'amigo(a)'}! 🎉 He registrado tu referencia de pago *#${reference_number}*.\n\nNuestro equipo está verificando la acreditación en el banco en este momento. En breve te confirmamos la entrega o acceso formal. ¡Muchas gracias por tu compra! 🙌`;
+      } else if (fnCall.name === 'send_catalog_photo') {
+        const { product_name, photo_url, caption } = fnCall.args;
+        if (photo_url) {
+          try {
+            await sendWhatsAppImage(business, contact.phone, photo_url, caption || `Aquí tienes la foto de: ${product_name} 📸`);
+            response = caption || `¡Con gusto! Acabo de enviarte la foto de *${product_name}* 📸. ¿Qué te parece?`;
+          } catch (imgErr) {
+            response = `Aquí tienes la imagen de *${product_name}*: ${photo_url} 📸. ¿Te gustaría apartar el tuyo?`;
+          }
+        } else {
+          response = `Con gusto te muestro más detalles sobre *${product_name}*. ¿Hay algún modelo o característica específica que desees ver? 😊`;
+        }
       } else if (fnCall.name === 'check_availability') {
         toolResult = await checkCalendarAvailability(business, fnCall.args.service, fnCall.args.preferred_date);
         const followUp = await chat.sendMessage([{
@@ -400,7 +507,7 @@ _Notificación enviada automáticamente a tu WhatsApp_`;
     }
   } catch (err) {
     logger.error('Error en Gemini AI:', err.message);
-    response = 'En este momento tengo un inconveniente técnico. Por favor intenta en unos minutos o escribe "humano" para hablar con un asesor.';
+    response = '¡Hola! Disculpa, hubo un breve retraso en mi señal de red. ¿Me comentas en qué te puedo colaborar o si gustas te paso los detalles directamente? 😊';
   }
 
   await saveMessage({

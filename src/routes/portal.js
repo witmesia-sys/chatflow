@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import fs from 'fs';
 import { supabase } from '../services/supabase.js';
 import { inferBotPersona } from '../services/openai.js';
 import { evaluateAnomalies } from '../services/anomalyFilter.js';
@@ -279,6 +280,67 @@ router.post('/api/portal/:businessId/profile', async (req, res) => {
       anomaly: false,
       message: '¡Excelente! Los datos de tu negocio y la memoria de tu bot fueron actualizados con éxito en tiempo real. 🎉'
     });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /api/portal/:businessId/photos — Subir foto de producto/catálogo
+router.post('/api/portal/:businessId/photos', async (req, res) => {
+  try {
+    const { businessId } = req.params;
+    const { product_name, image_base64, description } = req.body;
+
+    if (!product_name || !image_base64) {
+      return res.status(400).json({ error: 'Nombre de producto e imagen son requeridos' });
+    }
+
+    const matches = image_base64.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+    const ext = matches ? (matches[1].split('/')[1] || 'jpg') : 'jpg';
+    const base64Data = matches ? matches[2] : image_base64;
+
+    const uploadsDir = join(__dirname, '..', '..', 'public', 'uploads');
+    await fs.promises.mkdir(uploadsDir, { recursive: true });
+
+    const safeName = product_name.toLowerCase().replace(/[^a-z0-9]/g, '_').substring(0, 30);
+    const fileName = `${businessId.substring(0, 8)}_${Date.now()}_${safeName}.${ext}`;
+    const filePath = join(uploadsDir, fileName);
+
+    await fs.promises.writeFile(filePath, Buffer.from(base64Data, 'base64'));
+
+    const baseUrl = process.env.RENDER_EXTERNAL_URL || 'https://chatflow-1dns.onrender.com';
+    const publicUrl = `${baseUrl}/uploads/${fileName}`;
+
+    const title = `📸 FOTO_PRODUCTO: ${product_name}`;
+    const content = `Foto oficial del producto/servicio "${product_name}". Enlace de imagen: ${publicUrl}. Descripción: ${description || 'Foto del catálogo del negocio'}. REGLA: Si el cliente pide fotos o muestras de este producto o servicio, comparte esta foto mediante send_catalog_photo.`;
+
+    const { data, error } = await supabase.from('knowledge_base').insert({
+      business_id: businessId,
+      title,
+      content,
+      content_type: 'custom',
+      is_active: true
+    }).select().single();
+
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ ok: true, photo: { id: data.id, product_name, url: publicUrl, title } });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── DELETE /api/portal/:businessId/photos/:id — Eliminar foto del catálogo
+router.delete('/api/portal/:businessId/photos/:id', async (req, res) => {
+  try {
+    const { businessId, id } = req.params;
+    const { error } = await supabase
+      .from('knowledge_base')
+      .delete()
+      .eq('id', id)
+      .eq('business_id', businessId);
+
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

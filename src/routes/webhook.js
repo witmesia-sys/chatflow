@@ -9,6 +9,19 @@ import { logger } from '../utils/logger.js';
 
 const router = Router();
 
+// ── Cache de Deduplicación en Memoria (Evita mensajes duplicados por reintentos de Meta)
+const processedMessageIds = new Set();
+function isDuplicateMessage(msgId) {
+  if (!msgId) return false;
+  if (processedMessageIds.has(msgId)) return true;
+  processedMessageIds.add(msgId);
+  if (processedMessageIds.size > 3000) {
+    const first = processedMessageIds.values().next().value;
+    processedMessageIds.delete(first);
+  }
+  return false;
+}
+
 // ── GET: Verificación del Webhook (Meta llama esto al registrar)
 router.get('/', (req, res) => {
   const mode      = req.query['hub.mode'];
@@ -40,6 +53,14 @@ router.post('/', verifySignature, async (req, res) => {
         const message = value?.messages?.[0];
         if (!message) continue;
 
+        const waMessageId = message.id;
+
+        // 🛡️ Filtro Anti-Duplicados (Meta retries)
+        if (isDuplicateMessage(waMessageId)) {
+          logger.warn(`Mensaje duplicado descartado por reintento de Meta: ${waMessageId}`);
+          continue;
+        }
+
         let userText = '';
         let isImage  = false;
         let imageId  = null;
@@ -58,7 +79,6 @@ router.post('/', verifySignature, async (req, res) => {
 
         if (!userText && !isImage) continue;
 
-        const waMessageId   = message.id;
         const fromPhone     = message.from;
         const businessPhone = value.metadata?.display_phone_number;
 
@@ -175,11 +195,14 @@ router.post('/', verifySignature, async (req, res) => {
 
         // 8. Enviar respuesta al cliente con soporte de Botones Interactivos
         if (aiResponse) {
+          const notes = (business.notes || '').toLowerCase();
+          const isSales = notes.includes('[mode:sales]');
           const lowerUser = userText.toLowerCase();
           const isGreetingOrGeneral = lowerUser.match(/^(hola|buenas|buen dia|que tal|menu|servicios|precios|info|ayuda)/i);
           const isBookingIntent = lowerUser.includes('agendar') || lowerUser.includes('reservar') || lowerUser.includes('cita');
 
-          if (isGreetingOrGeneral && !isBookingIntent && !aiResponse.includes('COMPROBANTE DE RESERVA')) {
+          // Solo enviar botones de barbería física si NO estamos en modo ventas B2B
+          if (!isSales && isGreetingOrGeneral && !isBookingIntent && !aiResponse.includes('COMPROBANTE DE RESERVA')) {
             await sendWhatsAppButtons(
               business,
               fromPhone,
@@ -187,6 +210,7 @@ router.post('/', verifySignature, async (req, res) => {
               ['📅 Agendar Cita', '✂️ Precios / Servicios', '📍 Ubicación']
             );
           } else {
+            // En modo ventas B2B: Enviar mensaje conversacional limpio sin botones de corte de cabello
             await sendWhatsAppMessage(business, fromPhone, aiResponse);
           }
         }

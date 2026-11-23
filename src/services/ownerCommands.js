@@ -166,9 +166,90 @@ _Tu Asistente Virtual 24/7 y Contador de Bolsillo._
     return `📱 *PORTAL PRIVADO DE GESTIÓN — ${business.name.toUpperCase()}*\n━━━━━━━━━━━━━━━━━━━━━\nAquí tienes el acceso a tu Web App Móvil para gestionar tu negocio desde tu celular:\n\n🔗 *Acceso Directo:*\n${portalUrl}\n\n✨ *Desde tu portal puedes:*\n• 📅 Ver tus citas en vivo y exportar a Excel.\n• 📦 Apagar productos agotados con un solo toque.\n• 🖨️ Ver e imprimir tu Stand QR de mostrador.\n• ⚙️ Modificar tus precios, horarios y nombre del bot.\n\n💡 _Tip: Abre el enlace en tu navegador móvil y selecciona "Agregar a pantalla de inicio" para tenerlo como una app en tu teléfono._`;
   }
 
-  // 7. #ayuda — Menú de comandos
+  // 7. #nivel o #rango — Sistema de Niveles y Gamificación tipo Cashea
+  if (lower === '#nivel' || lower === '!nivel' || lower === '#rango' || lower === '!rango' || lower === '#puntos' || lower === '!puntos') {
+    // Determinar nivel actual desde subscription_tier o notas
+    const tierMatch = (business.notes || '').match(/\[nivel:(\d)\]/i) || (business.subscription_tier || '').match(/(\d)/);
+    let levelNum = tierMatch ? parseInt(tierMatch[1], 10) : 2; // Por defecto Nivel 2 para suscriptores activos
+    if (levelNum < 1) levelNum = 1;
+    if (levelNum > 6) levelNum = 6;
+
+    const levelsInfo = {
+      1: {
+        name: 'Barber Rookie 🥉',
+        msgs: '500 msgs/mes',
+        perks: ['🤖 Recepcionista 24/7 activo', '💵 Comando #caja diario', '📖 Libro Maestro 67 Páginas'],
+        nextReq: '1 mes consecutivo puntual o 30 citas agendadas',
+        nextLevel: 'Nivel 2 (Barber Pro) con +150 mensajes extra/mes'
+      },
+      2: {
+        name: 'Barber Pro 🥈',
+        msgs: '650 msgs/mes (+150 extra)',
+        perks: ['🤖 Recepcionista 24/7 activo', '💵 Comando #caja y #resumen', '🎁 +150 mensajes extra cada mes gratis', '📊 Reporte de rendimiento semanal'],
+        nextReq: '2 meses consecutivos puntual o 80 citas confirmadas',
+        nextLevel: 'Nivel 3 (Barber Master) con +300 mensajes extra y detector de horas muertas'
+      },
+      3: {
+        name: 'Barber Master 🥇',
+        msgs: '800 msgs/mes (+300 extra)',
+        perks: ['🤖 Recepcionista 24/7 activo', '🎁 +300 mensajes extra cada mes gratis', '📉 Alerta semanal de horas muertas para lanzar promos', '⚡ Respuesta ultra rápida prioritaria'],
+        nextReq: '3 meses consecutivos puntual o 1 barbero colega referido',
+        nextLevel: 'Nivel 4 (Elite Barber) con Multi-Barbero (2 sillas en el mismo bot)'
+      },
+      4: {
+        name: 'Elite Barber 💈',
+        msgs: '1,000 msgs/mes (+500 extra)',
+        perks: ['🤖 Soporte Multi-Silla (hasta 2 barberos en el mismo bot)', '🎁 +500 mensajes extra gratis', '📊 Métricas separadas por barbero en #caja', '⭐ Insignia Elite en reportes'],
+        nextReq: '5 meses consecutivos puntual o 2 referidos activos',
+        nextLevel: 'Nivel 5 (Barber Leyenda) con Tarifa Lealtad ($25/mes en vez de $29)'
+      },
+      5: {
+        name: 'Barber Leyenda 👑',
+        msgs: '1,500 msgs/mes (+1,000 extra)',
+        perks: ['💰 Tarifa Lealtad protegida: $25/mes (en vez de $29/mes)', '🎁 +1,000 mensajes extra gratis', '💈 Soporte hasta 3 barberos en el mismo bot', '🚀 Soporte técnico VIP prioritario'],
+        nextReq: '6 meses impecables sin mora o 3 referidos activos',
+        nextLevel: 'Nivel 6 (Barber Black / Diamond) con Mensajes ILIMITADOS y Tarifa $22/mes'
+      },
+      6: {
+        name: 'Barber Black / Diamond 💎',
+        msgs: 'ILIMITADOS (Fair Use 3,000 msgs)',
+        perks: ['💎 Tarifa Dorada Inmortal: $22/mes de por vida', '🚀 Mensajes ILIMITADOS de WhatsApp', '💈 Multi-Barbero completo para toda la barbería (hasta 5 sillas)', '👑 Insignia Diamante Oficial en cada corte de caja', '🛡️ Inmunidad de 10 días de gracia en pagos'],
+        nextReq: '¡Felicidades! Has alcanzado la cima máxima de BarberPro AI.',
+        nextLevel: 'Nivel Máximo Activo'
+      }
+    };
+
+    const cur = levelsInfo[levelNum];
+    const isOverdue = business.subscription_status === 'past_due' || business.subscription_status === 'overdue';
+
+    return `🏆 *BARBERPRO CLUB — TU NIVEL DE BENEFICIOS*
+━━━━━━━━━━━━━━━━━━━━━
+💈 *Barbería:* ${business.name.toUpperCase()}
+⭐ *Nivel Actual:* NIVEL ${levelNum} — *${cur.name}*
+💬 *Cupo de Mensajes:* ${cur.msgs}
+
+🎁 *TUS VENTAJAS ACTIVAS:*
+${cur.perks.map(p => `• ${p}`).join('\n')}
+
+🎯 *PRÓXIMO OBJETIVO:*
+• *Meta:* ${cur.nextReq}
+• *Desbloqueas:* ${cur.nextLevel}
+
+⚖️ *ESTADO DE TU SUSCRIPCIÓN:*
+• Estatus: ${isOverdue ? '⚠️ PAGO PENDIENTE (¡Riesgo de degradación de nivel!)' : '✅ AL DÍA Y ACTIVA'}
+• Mensualidad: $${business.monthly_price || 29} USD / mes
+
+⚠️ *REGLA DE PROTECCIÓN DE NIVEL:*
+_• Retraso de 5 días: Pierdes 1 Nivel (-1 nivel)._
+_• Retraso de 15 días: Pierdes 2 Niveles (-2 niveles) y el bot se pausa._
+_¡Paga puntual para proteger tu racha y no perder tus beneficios acumulados!_
+━━━━━━━━━━━━━━━━━━━━━
+💡 _Escribe *#caja* para ver tus ingresos o *#ayuda* para más opciones._`;
+  }
+
+  // 8. #ayuda — Menú de comandos
   if (lower === '#ayuda' || lower === '!ayuda' || lower === '#menu' || lower === '!menu') {
-    return `📱 *MENÚ DE CONTROL DIRECTO — DUEÑO*\n━━━━━━━━━━━━━━━━━━━━━\nPuedes controlar a tu bot y tus finanzas desde tu propio WhatsApp con estos comandos:\n\n• *#caja* o *#resumen* ➔ Corte de caja del día, ingresos en USD y métricas\n• *#citas* ➔ Ver las próximas citas agendadas\n• *#bot* ➔ Reactivar bot si estaba en pausa\n• *#portal* ➔ Abrir tu Web App de gestión móvil\n• *#agotar <producto>* ➔ Marcar algo sin stock\n• *#disponible <producto>* ➔ Reactivar disponibilidad\n• *#bloquear <horario>* ➔ Bloquear horas de la agenda\n• *#ayuda* ➔ Ver este menú\n━━━━━━━━━━━━━━━━━━━━━\n_Solo tú (desde tu número de dueño registrado) puedes ejecutar estos comandos._`;
+    return `📱 *MENÚ DE CONTROL DIRECTO — DUEÑO*\n━━━━━━━━━━━━━━━━━━━━━\nPuedes controlar a tu bot y tus finanzas desde tu propio WhatsApp con estos comandos:\n\n• *#caja* o *#resumen* ➔ Corte de caja del día, ingresos en USD y métricas\n• *#nivel* ➔ Ver tu nivel de beneficios Cashea, ventajas y puntos acumulados\n• *#citas* ➔ Ver las próximas citas agendadas\n• *#bot* ➔ Reactivar bot si estaba en pausa\n• *#portal* ➔ Abrir tu Web App de gestión móvil\n• *#agotar <producto>* ➔ Marcar algo sin stock\n• *#disponible <producto>* ➔ Reactivar disponibilidad\n• *#bloquear <horario>* ➔ Bloquear horas de la agenda\n• *#ayuda* ➔ Ver este menú\n━━━━━━━━━━━━━━━━━━━━━\n_Solo tú (desde tu número de dueño registrado) puedes ejecutar estos comandos._`;
   }
 
   return null;

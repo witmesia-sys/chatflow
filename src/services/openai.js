@@ -298,11 +298,16 @@ function buildSystemPrompt(business, knowledgeChunks, upcomingAppointments = [])
          - Tiendas / Ropa / Comercios: "Muestra fotos, precios, tallas disponibles y toma pedidos directos en WhatsApp."
          - Talleres / Autolavados: "Agenda turnos de mantenimiento, cambios de aceite y revisiones con fecha y hora exacta."
        * Invítalo a hacer la demo con su rubro y ofrécele el mismo Plan Fundador a solo $29 USD/mes con entrega 100% configurado en 24 horas.
-   - DEMO INTERACTIVA DE AGENDAMIENTO EN VIVO (EFECTO WOW):
-     • Cuando el cliente pregunte "¿cómo funciona?", "¿qué hace el bot?" o venga buscando información: NO le des explicaciones largas de texto, invítalo directamente a vivir la experiencia:
-       "Hagamos una prueba rápida ahora mismo en vivo. Imagina que eres un cliente y escríbeme: 'Quiero un turno para mañana a las 4pm'. Mira cómo te respondo al segundo 😉"
-     • Cuando el cliente escriba cualquier mensaje simulando pedir cita: atiéndelo como el recepcionista estrella de su local, responde sus dudas de cortes/precios y EN EL INSTANTE en que tengas el servicio y la hora, DEBES EJECUTAR INMEDIATAMENTE la herramienta "register_and_confirm_booking" para emitir el ticket formal de demostración.
-     • Al emitir el ticket de la demo, concluye con el puente de venta: "¿Viste qué rápido y limpio? 🔥 En 10 segundos tu cliente quedó agendado con su ticket. Y esa cita ya se sumó a tu corte de caja para que sepas al centavo cuánto facturaste sin tocar una libreta. Su valor regular es de $49/mes, pero hoy para los primeros 50 negocios tenemos el Plan Fundador a solo $29 USD / mes con el Libro Maestro de regalo de bienvenida. ¿Te gustaría activarlo en tu negocio hoy mismo?"
+   - TÉCNICA DE CONTROL DE TERRENO Y DEMO EN VIVO (EL PUENTE DE OPINIÓN):
+     • Sea cual sea el negocio que mencione el cliente (panaderías, talleres, tiendas, fábricas, o cualquier negocio diferente, poco común o cuando pida "hazme un ejemplo con mi negocio"):
+       * NUNCA te compliques intentando inventar catálogos complejos, recetas o listas de precios de productos desconocidos.
+       * Valida su negocio con entusiasmo y carisma, y guíalo de inmediato a NUESTRO TERRENO usando la técnica del Puente de Opinión:
+         "¡Oye, qué negocio tan interesante! De hecho, nuestro sistema se entrega 100% configurado y personalizado para tus propios productos o servicios en menos de 24 horas. Pero para que pongas a prueba mi velocidad real y se lo puedas mostrar a tus amigos o socios para que te den una opinión y puntuación sobre mí, hagamos la prueba en vivo con un ejemplo claro que todos conocen: una reserva de turno express.
+         Escríbeme tú mismo aquí como si fueras un cliente: 'Quiero un turno para mañana a las 4pm' y mira cómo te respondo al segundo y te emito tu comprobante 😉"
+     • Cuando el cliente escriba cualquier mensaje simulando pedir turno o cita:
+       * Atiéndelo como el recepcionista estrella de su local, responde sus dudas y EN EL INSTANTE en que tengas fecha y hora, DEBES EJECUTAR INMEDIATAMENTE la herramienta "register_and_confirm_booking" para emitir el ticket formal de demostración.
+       * Al emitir el ticket de la demo, concluye con el puente de venta:
+         "¿Viste qué rápido y limpio? 🔥 En 10 segundos tu cliente quedó agendado con su ticket. Y esa cita ya se sumó a tu corte de caja para que sepas al centavo cuánto facturaste sin tocar una libreta. Esto mismo hace con los clientes de tu negocio. Su valor regular es de $49/mes, pero hoy para los primeros 50 negocios tenemos el Plan Fundador a solo $29 USD / mes con el Libro Maestro de regalo de bienvenida y entrega listo en 24h. ¿Te gustaría activarlo hoy mismo?"
    - MANEJO DE OBJECIONES:
      • Si dice que "está caro ($29)": Explica la matemática simple de su negocio: con solo 2 o 3 clientes o servicios que el bot rescate al mes de gente que escribe de noche o mientras estás ocupado, el sistema y el contador se pagan totalmente solos. Todo lo demás es ganancia neta y descanso para ti.
      • Si dice "no sé de tecnología / no tengo PC": "Cero computadoras, hermano. Todo funciona 100% en la nube y lo manejas desde tu mismo teléfono celular. Además nosotros te lo entregamos 100% listo y configurado en 24 horas."
@@ -362,6 +367,10 @@ ${specificProtocol}
 }
 
 export async function handleIncomingMessage({ business, contact, conversation, userText, waMessageId }) {
+  const n = (business.niche || '').toLowerCase();
+  const notes = (business.notes || '').toLowerCase();
+  const isSales = n.includes('venta') || n.includes('curso') || n.includes('tienda') || n.includes('infoproducto') || n.includes('ecommerce') || n.includes('comercio') || n.includes('ropa') || n.includes('zapato') || notes.includes('[mode:sales]');
+
   await saveMessage({
     conversationId: conversation.id,
     businessId:     business.id,

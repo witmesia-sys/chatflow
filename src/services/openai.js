@@ -19,12 +19,22 @@ const PRIMARY_MODEL = (envModel.includes('3.8') || envModel.includes('exp') || !
   : envModel;
 const FALLBACK_MODEL = 'gemini-3.5-flash';
 
-// Timeout de seguridad de 8 segundos para garantizar respuestas instantáneas sin cortes por latencia de red
-function sendMessageWithTimeout(chat, message, timeoutMs = 8000) {
+// Timeout de seguridad de 15 segundos para garantizar respuestas completas sin cortes prematuros
+function sendMessageWithTimeout(target, message, timeoutMs = 15000, isGenerateContent = false) {
   const timeout = new Promise((_, reject) =>
     setTimeout(() => reject(new Error('TIMEOUT_EXCEEDED')), timeoutMs)
   );
-  return Promise.race([chat.sendMessage(message), timeout]);
+  const action = isGenerateContent ? target.generateContent(message) : target.sendMessage(message);
+  return Promise.race([action, timeout]);
+}
+
+function isErrorOrFallbackMessage(content = '') {
+  const c = (content || '').toLowerCase();
+  return c.includes('inconveniente técnico') ||
+         c.includes('retraso en mi señal') ||
+         c.includes('breve retraso') ||
+         c.includes('señal de red') ||
+         c.includes('disculpa la demora');
 }
 
 /**
@@ -33,13 +43,13 @@ function sendMessageWithTimeout(chat, message, timeoutMs = 8000) {
  * 2. Si hay mensajes consecutivos del mismo rol, los concatena.
  * 3. El primer mensaje debe ser 'user'.
  * 4. El último mensaje debe ser 'model' (antes de enviar el nuevo userText).
- * 5. Ignora respuestas de error anteriores para no contaminar el contexto.
+ * 5. Ignora respuestas de error o fallbacks anteriores para no contaminar el contexto.
  */
 function sanitizeGeminiHistory(rawHistory) {
   const clean = [];
   let lastRole = null;
   for (const m of (rawHistory || [])) {
-    if (!m.content || m.content.includes('inconveniente técnico')) continue;
+    if (!m.content || isErrorOrFallbackMessage(m.content)) continue;
     const role = m.role === 'assistant' ? 'model' : 'user';
     if (role === lastRole && clean.length > 0) {
       // Concatenar mensajes consecutivos del mismo rol
@@ -383,16 +393,17 @@ export async function handleIncomingMessage({ business, contact, conversation, u
     let chat = modelInstance.startChat({ history: geminiHistory });
     let result;
     try {
-      result = await sendMessageWithTimeout(chat, userText, 8000);
+      result = await sendMessageWithTimeout(chat, userText, 14000);
     } catch (modelErr) {
-      logger.warn(`Modelo primario ${PRIMARY_MODEL} demoró o falló (${modelErr.message}). Conmutando al instante a ${FALLBACK_MODEL}...`);
-      modelInstance = genAI.getGenerativeModel({
-        model:             FALLBACK_MODEL,
+      logger.warn(`Llamada en chat demoró o falló (${modelErr.message}). Reintentando con llamada directa y fallback...`);
+      const directModel = genAI.getGenerativeModel({
+        model:             PRIMARY_MODEL,
         systemInstruction: systemPrompt,
-        tools:             activeTools,
       });
-      chat = modelInstance.startChat({ history: geminiHistory });
-      result = await sendMessageWithTimeout(chat, userText, 10000);
+      const fallbackPrompt = geminiHistory.length > 0
+        ? `Historial reciente:\n${geminiHistory.map(h => `${h.role}: ${h.parts[0]?.text || ''}`).join('\n')}\n\nCliente: ${userText}`
+        : userText;
+      result = await sendMessageWithTimeout(directModel, fallbackPrompt, 15000, true);
     }
     const resp = result.response;
 
@@ -526,7 +537,11 @@ _Verifica en tu cuenta bancaria y envía el producto o acceso al cliente._`;
     }
   } catch (err) {
     logger.error('Error en Gemini AI:', err.message);
-    response = '¡Hola! Disculpa, hubo un breve retraso en mi señal de red. ¿Me comentas en qué te puedo colaborar o si gustas te paso los detalles directamente? 😊';
+    if (isSales) {
+      response = '¡Hola! Disculpa la demora, estaba atendiendo otra consulta. Con respecto a lo que me comentas, ¿te gustaría que te pase los detalles de la promo o cómo lo adaptamos a tu negocio directamente? 😊';
+    } else {
+      response = '¡Hola! Disculpa, hubo un breve retraso en la conexión. ¿Me comentas en qué te puedo colaborar o qué horario te gustaría consultar? 😊';
+    }
   }
 
   await saveMessage({

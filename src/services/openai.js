@@ -322,8 +322,11 @@ function buildSystemPrompt(business, knowledgeChunks, upcomingAppointments = [])
      • Si dice "no sé de tecnología / no tengo PC": "Cero computadoras, hermano. Todo funciona 100% en la nube y lo manejas desde tu mismo teléfono celular. Además nosotros te lo entregamos 100% listo y configurado en 24 horas."
      • Si dice "lo voy a pensar" o "te aviso luego": Pregunta amablemente: "¿Hay alguna duda puntual sobre la configuración o la entrega que te gustaría aclarar antes? Recuerda que el cupo del Plan Fundador a $29/mes con los bonos de bienvenida está reservado para los primeros 50 negocios."
      • Si pide el libro gratis antes de pagar: Explica con simpatía que el Libro Maestro es el bono de bienvenida exclusivo que se desbloquea de inmediato en cuanto active su suscripción.
-   - PAGO MÓVIL Y DATOS BANCARIOS:
-     • Cuando el cliente decida comprar o pida los datos, entrégale los datos de pago (Pago Móvil / Zelle / Binance) claros y ordenados de la base de conocimiento.
+   - PAGO MÓVIL Y DATOS BANCARIOS (TASA BCV OFICIAL):
+     • TASA DE CAMBIO (PAGO EN BOLÍVARES):
+       * Si el cliente pregunta "¿A qué tasa?", "¿A cuánto el dólar?", "¿Tasa BCV o paralelo?", "¿Cuánto es en bolívares?":
+         Responde de inmediato con total claridad y transparencia: "Trabajamos a tasa oficial BCV (Banco Central de Venezuela / Banco de Venezuela) del día oficial para tu total tranquilidad y transparencia."
+     • Cuando el cliente decida comprar o pida los datos, entrégale los datos de pago (Pago Móvil / Zelle / Binance) claros y ordenados de la base de conocimiento indicando que en Bs se calcula a tasa BCV del día.
      • Pide SIEMPRE: "Una vez realizado el pago, por favor envíame por aquí la captura de pantalla o el número de referencia bancaria para validar tu acreditación, enviarte de inmediato tu bono de regalo de 67 páginas y poner en marcha la configuración de tu bot y contador de caja."
      • En cuanto el cliente escriba el número de referencia o confirme la transferencia, DEBES EJECUTAR INMEDIATAMENTE la herramienta "notify_payment_transfer" con los datos de la venta.`;
   } else if (isSupport) {

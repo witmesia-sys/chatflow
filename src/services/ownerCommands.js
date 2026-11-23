@@ -240,8 +240,8 @@ ${cur.perks.map(p => `• ${p}`).join('\n')}
 • Mensualidad: $${business.monthly_price || 29} USD / mes
 
 ⚠️ *REGLA DE PROTECCIÓN DE NIVEL:*
-_• Retraso de 5 días: Pierdes 1 Nivel (-1 nivel)._
-_• Retraso de 15 días: Pierdes 2 Niveles (-2 niveles) y el bot se pausa._
+_• Retraso de 5 días: Pierdes 2 Niveles de golpe (-2 niveles)._
+_• Retraso de 15 días: Caes directo a Nivel 1 (Reinicio total) y el bot se pausa._
 _¡Paga puntual para proteger tu racha y no perder tus beneficios acumulados!_
 ━━━━━━━━━━━━━━━━━━━━━
 💡 _Escribe *#caja* para ver tus ingresos o *#ayuda* para más opciones._`;
